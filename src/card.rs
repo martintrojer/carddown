@@ -2,9 +2,9 @@ use anyhow::Context;
 use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use tokio::fs;
 
 lazy_static! {
     static ref CARD_RE: Regex = Regex::new(r"#flashcard|🧠").unwrap();
@@ -41,10 +41,9 @@ fn strip_tags(line: &str) -> Result<String> {
         .to_string())
 }
 
-pub async fn parse_file(file: &Path) -> Result<Vec<Card>> {
-    let contents = fs::read_to_string(file)
-        .await
-        .with_context(|| format!("Error reading `{}`", file.to_string_lossy()))?;
+pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
+    let contents =
+        fs::read_to_string(file).with_context(|| format!("Error reading `{}`", file.display()))?;
     let mut cards = vec![];
     let mut card_lines: Vec<String> = vec![];
     let mut tags: Vec<String> = vec![];
@@ -110,12 +109,12 @@ pub async fn parse_file(file: &Path) -> Result<Vec<Card>> {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_parse_multi_line_cards() {
+    #[test]
+    fn test_parse_multi_line_cards() {
         let data =
             "What is the answer to life, the universe, and everything? #flashcard\n42\nand stuff\n---\n             q1:a1 🧠 ";
-        fs::write("/tmp/test2.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test2.md")).await.unwrap();
+        fs::write("/tmp/test2.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test2.md")).unwrap();
         assert_eq!(cards.len(), 2);
         let card = &cards[0];
         assert_eq!(card.file.to_str(), Some("/tmp/test2.md"));
@@ -133,12 +132,12 @@ mod tests {
         assert!(card.tags.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_parse_file() {
+    #[test]
+    fn test_parse_file() {
         let data =
             "What is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
-        fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
+        fs::write("/tmp/test.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.file.to_str(), Some("/tmp/test.md"));
@@ -151,8 +150,8 @@ mod tests {
         assert_eq!(card.tags, vec!["#flashcard", "#foo", "#test"]);
 
         let data = "q1:a1 🧠 ";
-        fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
+        fs::write("/tmp/test.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.line, 0);
@@ -161,18 +160,18 @@ mod tests {
         assert!(card.tags.is_empty());
 
         let data = "";
-        fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
+        fs::write("/tmp/test.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
         assert!(cards.is_empty());
 
         let data = " hello : there";
-        fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
+        fs::write("/tmp/test.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
         assert!(cards.is_empty());
 
         let data = "#flashcard\nq1\na1\n#flashcard\nq2\na2\n-";
-        fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
+        fs::write("/tmp/test.md", data).unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
         assert!(cards.is_empty());
     }
 
