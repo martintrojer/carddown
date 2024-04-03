@@ -2,6 +2,7 @@ use anyhow::Context;
 use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -14,13 +15,13 @@ lazy_static! {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-struct Card {
-    id: blake3::Hash,
-    file: PathBuf,
-    line: u64,
-    question: String,
-    answer: String,
-    tags: Vec<String>, // stripped of hash
+pub struct Card {
+    pub id: blake3::Hash,
+    pub file: PathBuf,
+    pub line: u64,
+    pub question: String,
+    pub answer: String,
+    pub tags: Vec<String>,
 }
 
 fn parse_tags(line: &str) -> Vec<String> {
@@ -31,45 +32,47 @@ fn parse_tags(line: &str) -> Vec<String> {
         .collect()
 }
 
-async fn parse_file(file: &str) -> Result<Vec<Card>> {
+fn strip_tags(line: &str) -> Result<String> {
+    Ok(line
+        .split(&['#', '🧠'])
+        .next()
+        .context("error stripping tags")?
+        .trim()
+        .to_string())
+}
+
+pub async fn parse_file(file: &Path) -> Result<Vec<Card>> {
     let contents = fs::read_to_string(file)
         .await
-        .with_context(|| format!("Error reading `{}`", file))?;
+        .with_context(|| format!("Error reading `{}`", file.to_string_lossy()))?;
     let mut cards = vec![];
     let mut card_lines: Vec<String> = vec![];
     let mut tags: Vec<String> = vec![];
     let mut question: Option<String> = None;
     let mut first_line: Option<u64> = None;
     for (line_number, line) in contents.lines().enumerate() {
-        println!("line_number: {}, line: {}", line_number, line);
-        println!("first_line: {:?}, card_lines: {:?}", first_line, card_lines);
+        log::debug!("line_number: {}, line: {}", line_number, line);
+        log::debug!("first_line: {:?}, card_lines: {:?}", first_line, card_lines);
         if CARD_RE.is_match(line) {
             if let Some(caps) = ONE_LINE_CARD_RE.captures(line) {
-                println!("caps: {:?}", caps);
-                let question = caps.get(1).context("error parsing card")?.as_str().trim();
-                let full_answer = caps.get(2).context("error parsing card")?.as_str();
-                let answer = full_answer
-                    .split(&['#', '🧠'])
-                    .next()
-                    .context("error parsing card")?
+                log::debug!("caps: {:?}", caps);
+                let question = caps
+                    .get(1)
+                    .context("error parsing card question")?
+                    .as_str()
                     .trim();
+                let full_answer = caps.get(2).context("error parsing card answer")?.as_str();
                 let tags = parse_tags(full_answer);
                 cards.push(Card {
                     id: blake3::hash(line.as_bytes()),
                     file: PathBuf::from(file),
                     line: line_number as u64,
                     question: question.to_string(),
-                    answer: answer.to_string(),
+                    answer: strip_tags(full_answer)?.to_string(),
                     tags,
                 });
             } else if MULTI_LINE_CARD_RE.is_match(line) {
-                question = Some(
-                    line.split('#')
-                        .next()
-                        .context("error parsing card")?
-                        .trim()
-                        .to_string(),
-                );
+                question = Some(strip_tags(line)?);
                 card_lines.push(line.to_string());
                 first_line = Some(line_number as u64);
                 tags = parse_tags(line);
@@ -88,12 +91,12 @@ async fn parse_file(file: &str) -> Result<Vec<Card>> {
                     line: line as u64,
                     question: quest,
                     answer,
-                    tags: tags.clone(),
+                    tags,
                 });
                 first_line = None;
                 question = None;
                 card_lines = Vec::new();
-                tags.clear();
+                tags = Vec::new();
             }
         } else if !card_lines.is_empty() {
             card_lines.push(line.to_string());
@@ -110,10 +113,10 @@ mod tests {
     #[tokio::test]
     async fn test_parse_multi_line_cards() {
         let data =
-            "What is the answer to life, the universe, and everything? #flashcard\n42\nand stuff\n---\n";
+            "What is the answer to life, the universe, and everything? #flashcard\n42\nand stuff\n---\n             q1:a1 🧠 ";
         fs::write("/tmp/test2.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test2.md").await.unwrap();
-        assert_eq!(cards.len(), 1);
+        let cards = parse_file(&PathBuf::from("/tmp/test2.md")).await.unwrap();
+        assert_eq!(cards.len(), 2);
         let card = &cards[0];
         assert_eq!(card.file.to_str(), Some("/tmp/test2.md"));
         assert_eq!(card.line, 0);
@@ -123,6 +126,11 @@ mod tests {
         );
         assert_eq!(card.answer, "42\nand stuff");
         assert_eq!(card.tags, vec!["#flashcard"]);
+        let card = &cards[1];
+        assert_eq!(card.line, 4);
+        assert_eq!(card.question, "q1");
+        assert_eq!(card.answer, "a1");
+        assert!(card.tags.is_empty());
     }
 
     #[tokio::test]
@@ -130,7 +138,7 @@ mod tests {
         let data =
             "What is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
         fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test.md").await.unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.file.to_str(), Some("/tmp/test.md"));
@@ -144,7 +152,7 @@ mod tests {
 
         let data = "q1:a1 🧠 ";
         fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test.md").await.unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.line, 0);
@@ -154,17 +162,17 @@ mod tests {
 
         let data = "";
         fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test.md").await.unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
         assert!(cards.is_empty());
 
         let data = " hello : there";
         fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test.md").await.unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
         assert!(cards.is_empty());
 
         let data = "#flashcard\nq1\na1\n#flashcard\nq2\na2\n-";
         fs::write("/tmp/test.md", data).await.unwrap();
-        let cards = parse_file("/tmp/test.md").await.unwrap();
+        let cards = parse_file(&PathBuf::from("/tmp/test.md")).await.unwrap();
         assert!(cards.is_empty());
     }
 
