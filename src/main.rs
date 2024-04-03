@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 mod card;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("Hello, world!");
 }

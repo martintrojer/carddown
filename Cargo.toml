@@ -11,4 +11,5 @@ blake3 = { version = "*", features = ["serde"] }
 lazy_static = "*"
 regex = "*"
 serde = "*"
+tokio = { version = "*", features = ["full"] }
 serde_json = "*"
