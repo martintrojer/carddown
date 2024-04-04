@@ -12,7 +12,6 @@ clap = { version = "*", features = ["derive"] }
 env_logger = "*"
 lazy_static = "*"
 log = "*"
-rayon = "*"
 regex = "*"
 serde = "*"
 serde_json = "*"

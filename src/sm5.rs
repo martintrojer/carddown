@@ -1,0 +1,2 @@
+
+INITIAL_INTERVAL: f64 = 4.0;
