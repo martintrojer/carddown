@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "*"
 blake3 = { version = "*", features = ["serde"] }
 clap = { version = "*", features = ["derive"] }
+chrono = { version = "*", features = ["serde"] }
 env_logger = "*"
 lazy_static = "*"
 log = "*"

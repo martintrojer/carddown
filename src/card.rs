@@ -87,7 +87,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                 cards.push(Card {
                     id,
                     file: PathBuf::from(file),
-                    line: line as u64,
+                    line,
                     question: quest,
                     answer,
                     tags,
