@@ -11,7 +11,7 @@ lazy_static! {
     static ref ONE_LINE_CARD_RE: Regex = Regex::new(r"^(.*):(.*)").unwrap();
     static ref MULTI_LINE_CARD_RE: Regex = Regex::new(r"#flashcard").unwrap();
     static ref TAG_RE: Regex = Regex::new(r"(#\w+)*").unwrap();
-    static ref END_OF_CARD_RE: Regex = Regex::new(r"\-\-\-|\- \- \-|\*\*\*|\* \* \*").unwrap();
+    static ref END_OF_CARD_RE: Regex = Regex::new(r"^(\-\-\-|\- \- \-|\*\*\*|\* \* \*)$").unwrap();
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]

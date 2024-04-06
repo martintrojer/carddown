@@ -11,6 +11,17 @@ pub enum Quality {
     IncorrectAndForgotten = 0,
 }
 
+impl Quality {
+    pub fn failed(&self) -> bool {
+        matches!(
+            self,
+            Self::IncorrectAndForgotten
+                | Self::IncorrectButRemembered
+                | Self::IncorrectButEasyToRecall
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardState {
     ease_factor: f64,
@@ -19,7 +30,7 @@ pub struct CardState {
 }
 
 impl CardState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             ease_factor: 2.5,
             interval: 0,

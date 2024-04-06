@@ -8,7 +8,8 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
   - Keeps tracks of flashcard by hash, thus supports file being edited and cards moved around.
   - Supports tags, to filter your study sessions.
   - Supports multiple spaced-repetition algorithms.
-
+  - No dependencies, fast, database in json format.
+  
 ## Rationale
 
 - I have a lot of notes in markdown, some of them contains facts that I want to be able to recall easily.
