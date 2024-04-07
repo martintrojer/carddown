@@ -2,6 +2,7 @@ mod sm2;
 
 use serde::{Deserialize, Serialize};
 
+// An integer from 0-5 indicating how easily the information was remembered today
 pub enum Quality {
     Perfect = 5,
     CorrectWithHesitation = 4,
@@ -24,8 +25,11 @@ impl Quality {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardState {
+    // The ease factor is used to determine the number of days to wait before reviewing again
     ease_factor: f64,
+    // An integer number indicating the number of days to wait before the next review
     interval: u64,
+    // The number of times the information has been reviewed prior to this review
     repetitions: u64,
 }
 

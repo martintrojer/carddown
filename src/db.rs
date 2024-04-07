@@ -53,11 +53,11 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     .with_context(|| format!("Error writing to `{}`", db_path.display()))
 }
 
-pub fn update_db(db_path: &Path, overwrite_existing: bool, found_cards: Vec<Card>) -> Result<()> {
+pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
     if found_cards.is_empty() {
         bail!("No cards to add to db");
     }
-    let mut card_db: CardDb = if overwrite_existing || !db_path.exists() {
+    let mut card_db: CardDb = if !db_path.exists() {
         HashMap::new()
     } else {
         get_db(db_path)?

@@ -41,17 +41,26 @@ fn strip_tags(line: &str) -> Result<String> {
         .to_string())
 }
 
+#[derive(Debug, Default)]
+struct ParseState {
+    card_lines: Vec<String>,
+    tags: Vec<String>,
+    question: Option<String>,
+    first_line: Option<u64>,
+}
+
 pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
     let contents =
         fs::read_to_string(file).with_context(|| format!("Error reading `{}`", file.display()))?;
     let mut cards = vec![];
-    let mut card_lines: Vec<String> = vec![];
-    let mut tags: Vec<String> = vec![];
-    let mut question: Option<String> = None;
-    let mut first_line: Option<u64> = None;
+    let mut state = ParseState::default();
     for (line_number, line) in contents.lines().enumerate() {
         log::debug!("line_number: {}, line: {}", line_number, line);
-        log::debug!("first_line: {:?}, card_lines: {:?}", first_line, card_lines);
+        log::debug!(
+            "first_line: {:?}, card_lines: {:?}",
+            state.first_line,
+            state.card_lines
+        );
         if CARD_RE.is_match(line) {
             if let Some(caps) = ONE_LINE_CARD_RE.captures(line) {
                 log::debug!("caps: {:?}", caps);
@@ -70,16 +79,18 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     answer: strip_tags(full_answer)?.to_string(),
                     tags,
                 });
+                state = ParseState::default();
             } else if MULTI_LINE_CARD_RE.is_match(line) {
-                question = Some(strip_tags(line)?);
-                card_lines.push(line.to_string());
-                first_line = Some(line_number as u64);
-                tags = parse_tags(line);
+                state.question = Some(strip_tags(line)?);
+                state.card_lines.push(line.to_string());
+                state.first_line = Some(line_number as u64);
+                state.tags = parse_tags(line);
             }
-        } else if END_OF_CARD_RE.is_match(line) && !card_lines.is_empty() {
-            if let (Some(quest), Some(line)) = (question.clone(), first_line) {
-                let id = blake3::hash(card_lines.join("\n").as_bytes());
-                let answer = card_lines
+        } else if END_OF_CARD_RE.is_match(line) && !state.card_lines.is_empty() {
+            if let (Some(quest), Some(line)) = (state.question.clone(), state.first_line) {
+                let id = blake3::hash(state.card_lines.join("\n").as_bytes());
+                let answer = state
+                    .card_lines
                     .into_iter()
                     .skip(1)
                     .collect::<Vec<_>>()
@@ -90,15 +101,12 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     line,
                     question: quest,
                     answer,
-                    tags,
+                    tags: state.tags,
                 });
-                first_line = None;
-                question = None;
-                card_lines = Vec::new();
-                tags = Vec::new();
+                state = ParseState::default();
             }
-        } else if !card_lines.is_empty() {
-            card_lines.push(line.to_string());
+        } else if !state.card_lines.is_empty() {
+            state.card_lines.push(line.to_string());
         }
     }
     Ok(cards)

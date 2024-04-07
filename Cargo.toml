@@ -8,11 +8,13 @@ edition = "2021"
 [dependencies]
 anyhow = "*"
 blake3 = { version = "*", features = ["serde"] }
-clap = { version = "*", features = ["derive"] }
 chrono = { version = "*", features = ["serde"] }
+clap = { version = "*", features = ["derive"] }
+crossterm = "*"
 env_logger = "*"
 lazy_static = "*"
 log = "*"
+ratatui = "*"
 regex = "*"
 serde = "*"
 serde_json = "*"

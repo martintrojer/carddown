@@ -1,6 +1,7 @@
 mod algorithm;
 mod card;
 mod db;
+mod tui;
 
 use crate::card::Card;
 use anyhow::Result;
@@ -9,6 +10,7 @@ use db::update_db;
 use env_logger::Env;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use tui::App;
 use walkdir::WalkDir;
 
 #[macro_use]
@@ -42,6 +44,7 @@ enum Algo {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Scan file of folder for cards
     Scan {
         /// Use a single file as input
         #[arg(long)]
@@ -54,17 +57,11 @@ enum Commands {
         /// File types to parse
         #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
         file_types: Vec<String>,
-
-        /// Overwrite any existing database with a fresh one
-        #[arg(long)]
-        overwrite_existing_db: bool,
     },
-    Orphan {
-        /// Remove all orphaned cards from the database
-        #[arg(long)]
-        remove_all: bool,
-    },
-    Test {
+    /// Audit the card database for orphaned and leech cards
+    Audit {},
+    /// Run a revise session
+    Revise {
         #[arg(long, default_value_t = 30)]
         maximum_cards_per_session: usize,
 
@@ -126,7 +123,6 @@ fn main() -> Result<()> {
             file,
             folder,
             file_types,
-            overwrite_existing_db,
         } => {
             let all_cards = if let Some(folder) = folder {
                 parse_cards_from_folder(&folder, &file_types)?
@@ -135,7 +131,13 @@ fn main() -> Result<()> {
             } else {
                 vec![]
             };
-            update_db(&args.db, overwrite_existing_db, all_cards)?;
+            update_db(&args.db, all_cards)?;
+        }
+        Commands::Audit {} => {
+            let mut terminal = tui::init()?;
+            let app_result = App::default().run(&mut terminal);
+            tui::restore()?;
+            app_result?
         }
         _ => {}
     }
