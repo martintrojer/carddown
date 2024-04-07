@@ -16,6 +16,7 @@ struct CardEntry {
     last_reviewed: Option<DateTime<Utc>>,
     failed_count: u64,
     orphan: bool,
+    leech: bool,
 }
 
 impl CardEntry {
@@ -26,6 +27,7 @@ impl CardEntry {
             last_reviewed: None,
             failed_count: 0,
             orphan: false,
+            leech: false,
         }
     }
 }
@@ -62,23 +64,44 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
     } else {
         get_db(db_path)?
     };
+    fn existing_ids(card_db: &CardDb) -> HashSet<blake3::Hash> {
+        card_db.keys().cloned().collect()
+    }
+
     let mut found_card_db: CardDb = found_cards
         .iter()
         .map(|card| (card.id, CardEntry::new(card.clone())))
         .collect();
-    let existing_ids: HashSet<_> = card_db.keys().cloned().collect();
     let found_ids: HashSet<_> = found_card_db.keys().cloned().collect();
+
     let mut new_ctr = 0;
     let mut orphan_ctr = 0;
+    let mut unorphan_ctr = 0;
+    let mut updated_ctr = 0;
+
+    // update existing cards
+    for id in existing_ids(&card_db).intersection(&found_ids) {
+        let mut entry = card_db.remove(id).unwrap();
+        let new = found_card_db.remove(id).unwrap();
+        if entry.card != new.card {
+            entry.card = new.card;
+            updated_ctr += 1;
+        }
+        if entry.orphan {
+            entry.orphan = false;
+            unorphan_ctr += 1;
+        }
+        card_db.insert(*id, entry);
+    }
 
     // new cards
-    for id in found_ids.difference(&existing_ids) {
+    for id in found_ids.difference(&existing_ids(&card_db)) {
         card_db.insert(*id, found_card_db.remove(id).unwrap());
         new_ctr += 1;
     }
 
     // orphaned cards
-    for id in existing_ids.difference(&found_ids) {
+    for id in existing_ids(&card_db).difference(&found_ids) {
         if let Some(entry) = card_db.get_mut(id) {
             entry.orphan = true;
         }
@@ -88,17 +111,19 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
     if new_ctr == 0 {
         log::info!("No new cards found");
     } else {
-        log::info!(
-            "Inserted {} new cards",
-            found_ids.difference(&existing_ids).count()
-        );
+        log::info!("Inserted {} new cards", new_ctr);
+    }
+
+    if updated_ctr > 0 {
+        log::info!("Updated {} cards", updated_ctr);
     }
 
     if orphan_ctr > 0 {
-        log::warn!(
-            "Found {} orphaned cards",
-            existing_ids.difference(&found_ids).count()
-        );
+        log::warn!("Found {} orphaned cards", orphan_ctr);
+    }
+
+    if unorphan_ctr > 0 {
+        log::info!("Unorphaned {} cards", unorphan_ctr);
     }
 
     write_db(db_path, &card_db)
