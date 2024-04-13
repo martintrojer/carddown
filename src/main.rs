@@ -1,15 +1,16 @@
 mod algorithm;
 mod card;
 mod db;
-mod tui;
+mod view;
 
+use crate::algorithm::Algo;
 use crate::card::Card;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
+use rand::prelude::*;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tui::App;
 use walkdir::WalkDir;
 
 #[macro_use]
@@ -28,17 +29,8 @@ lazy_static! {
 
 #[derive(Debug, Clone, ValueEnum)]
 enum LeechMethod {
-    Normal,
     Skip,
     Warn,
-}
-
-#[derive(Debug, Clone, ValueEnum)]
-enum Algo {
-    SM2,
-    SM5,
-    Simple8,
-    Leitner,
 }
 
 #[derive(Debug, Subcommand)]
@@ -141,15 +133,53 @@ fn main() -> Result<()> {
             db::update_db(&args.db, all_cards)?;
         }
         Commands::Audit {} => {
-            let mut terminal = tui::init()?;
             let db = db::get_db(&args.db)?;
             let cards = db.into_values().filter(|c| c.orphan || c.leech).collect();
-            let app_result = App::new(cards, Box::new(move |id| db::delete_card(&args.db, id)))
-                .run(&mut terminal);
-            tui::restore()?;
-            app_result?
+            let mut terminal = view::init()?;
+            let res =
+                view::audit::App::new(cards, Box::new(move |id| db::delete_card(&args.db, id)))
+                    .run(&mut terminal);
+            view::restore()?;
+            res?
         }
-        _ => {}
+        Commands::Revise {
+            maximum_cards_per_session,
+            maximum_duration_of_session,
+            leech_failure_threshold,
+            leech_method,
+            algorithm,
+            tags,
+            include_orphans,
+        } => {
+            let db = db::get_db(&args.db)?;
+            let today = chrono::Local::today();
+            let tags: HashSet<&str> = HashSet::from_iter(tags.iter().map(|s| s.as_str()));
+            let mut cards: Vec<_> = db
+                .into_values()
+                .filter(|c| {
+                    let next_date = today + chrono::Duration::days(c.state.interval as i64);
+                    next_date >= today
+                })
+                .filter(|c| {
+                    tags.is_empty() || c.card.tags.iter().any(|t| tags.contains(t.as_str()))
+                })
+                .filter(|c| include_orphans || !c.orphan)
+                .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
+                .collect();
+            cards.shuffle(&mut rand::thread_rng());
+            let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
+            let mut terminal = view::init()?;
+            let res = view::revise::App::new(
+                cards,
+                algorithm,
+                maximum_duration_of_session,
+                leech_failure_threshold,
+                Box::new(move |cards| db::update_cards(&args.db, cards)),
+            )
+            .run(&mut terminal);
+            view::restore()?;
+            res?
+        }
     }
 
     Ok(())

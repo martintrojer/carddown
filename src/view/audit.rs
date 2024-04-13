@@ -1,9 +1,7 @@
 use anyhow::Result;
-use crossterm::{execute, terminal::*};
 use ratatui::prelude::*;
 use std::io;
-use std::io::{stdout, Stdout};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::db::CardEntry;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -16,7 +14,6 @@ pub struct App {
     cards: Vec<CardEntry>,
     current_card: usize,
     exit: bool,
-    started: Instant,
     sure: bool,
     delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>>,
 }
@@ -28,13 +25,12 @@ impl App {
             delete_fn,
             current_card: 0,
             exit: false,
-            started: Instant::now(),
             sure: false,
         }
     }
 
     /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
+    pub fn run(&mut self, terminal: &mut super::Tui) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events()?;
@@ -65,7 +61,9 @@ impl App {
         match key_event.code {
             KeyCode::Char('q') | KeyCode::Char('Q') => self.exit(),
             KeyCode::Char('d') | KeyCode::Char('D') => {
-                self.sure = true;
+                if !self.cards.is_empty() {
+                    self.sure = true;
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') => {
                 self.sure = false;
@@ -73,9 +71,14 @@ impl App {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 if self.sure {
                     let card = self.cards.remove(self.current_card);
-                    (self.delete_fn)(card.card.id).unwrap();
-                    self.current_card = std::cmp::min(self.cards.len(), self.current_card);
-                    self.sure = false;
+                    if card.leech {
+                        // Make no sense to delete a leech card
+                        self.cards.push(card);
+                    } else {
+                        (self.delete_fn)(card.card.id).unwrap();
+                        self.current_card = std::cmp::min(self.cards.len(), self.current_card);
+                        self.sure = false;
+                    }
                 }
             }
             KeyCode::Left => {
@@ -106,7 +109,7 @@ impl App {
         let title = Title::from(" Are You Sure? ".bold());
         let instructions = Title::from(Line::from(vec![
             " Quit ".into(),
-            "<Q> ".blue().bold(),
+            "<Q> ".bold(),
             " Yes ".into(),
             "<Y> ".blue().bold(),
             " No ".into(),
@@ -132,25 +135,20 @@ impl App {
     }
 
     fn card_audit(&self) -> (Block, Text) {
-        let title = Title::from(" Audit Cards ".bold());
-        let secs = self.started.elapsed().as_secs();
-        let min = (secs / 60) as u64;
-        let secs = secs % 60;
+        let title = Title::from(
+            format!(
+                " Audit Cards {}/{}",
+                std::cmp::min(self.cards.len(), 1 + self.current_card),
+                self.cards.len()
+            )
+            .bold(),
+        );
         let instructions = Title::from(Line::from(vec![
             " Quit ".into(),
             "<Q> ".blue().bold(),
-            "<Left>/<Right>".blue().bold(),
+            "<Left> <Right>".green().bold(),
             " Delete ".into(),
             "<D> ".red().bold(),
-            "[".into(),
-            std::cmp::min(self.cards.len(), 1 + self.current_card)
-                .to_string()
-                .into(),
-            "/".into(),
-            self.cards.len().to_string().into(),
-            "] ".into(),
-            " Elapsed ".into(),
-            format!("{}:{:02} ", min, secs).bold(),
         ]));
         let block = Block::default()
             .title(title.alignment(Alignment::Center))
@@ -213,21 +211,4 @@ impl Widget for &App {
             .block(block)
             .render(area, buf);
     }
-}
-
-/// A type alias for the terminal type used in this application
-pub type Tui = Terminal<CrosstermBackend<Stdout>>;
-
-/// Initialize the terminal
-pub fn init() -> io::Result<Tui> {
-    execute!(stdout(), EnterAlternateScreen)?;
-    enable_raw_mode()?;
-    Terminal::new(CrosstermBackend::new(stdout()))
-}
-
-/// Restore the terminal to its original state
-pub fn restore() -> io::Result<()> {
-    execute!(stdout(), LeaveAlternateScreen)?;
-    disable_raw_mode()?;
-    Ok(())
 }

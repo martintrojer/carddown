@@ -1,8 +1,18 @@
-mod sm2;
+pub mod sm2;
 
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Algo {
+    SM2,
+    SM5,
+    Simple8,
+    Leitner,
+}
+
 // An integer from 0-5 indicating how easily the information was remembered today
+#[derive(Debug, Clone, Copy)]
 pub enum Quality {
     Perfect = 5,
     CorrectWithHesitation = 4,
@@ -28,7 +38,7 @@ pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
     ease_factor: f64,
     // An integer number indicating the number of days to wait before the next review
-    interval: u64,
+    pub interval: u64,
     // The number of times the information has been reviewed prior to this review
     repetitions: u64,
 }
@@ -43,6 +53,6 @@ impl CardState {
     }
 }
 
-trait Algorithm {
-    fn next_interval(&self, quality: Quality, state: &CardState) -> CardState;
+pub trait Algorithm {
+    fn next_interval(&self, quality: &Quality, state: &CardState) -> CardState;
 }

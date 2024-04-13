@@ -1,11 +1,11 @@
 use super::{Algorithm, CardState, Quality};
 
-struct Sm2 {}
+pub struct Sm2 {}
 
 impl Algorithm for Sm2 {
-    fn next_interval(&self, quality: Quality, state: &CardState) -> CardState {
+    fn next_interval(&self, quality: &Quality, state: &CardState) -> CardState {
         let mut res = state.clone();
-        let q = quality as usize;
+        let q = *quality as usize;
 
         if q >= 3 {
             match state.interval {

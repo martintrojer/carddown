@@ -9,10 +9,10 @@ use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardEntry {
     pub card: Card,
-    state: CardState,
+    pub state: CardState,
     pub last_reviewed: Option<DateTime<Utc>>,
     pub failed_count: u64,
     pub orphan: bool,
@@ -59,6 +59,14 @@ pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
     let mut card_db = get_db(db_path)?;
     if card_db.remove(&id).is_none() {
         bail!("Card with id {} not found", id);
+    }
+    write_db(db_path, &card_db)
+}
+
+pub fn update_cards(db_path: &Path, cards: &[CardEntry]) -> Result<()> {
+    let mut card_db = get_db(db_path)?;
+    for card in cards {
+        card_db.insert(card.card.id, card.clone());
     }
     write_db(db_path, &card_db)
 }
