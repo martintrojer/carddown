@@ -10,13 +10,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct CardEntry {
-    card: Card,
+pub struct CardEntry {
+    pub card: Card,
     state: CardState,
-    last_reviewed: Option<DateTime<Utc>>,
-    failed_count: u64,
-    orphan: bool,
-    leech: bool,
+    pub last_reviewed: Option<DateTime<Utc>>,
+    pub failed_count: u64,
+    pub orphan: bool,
+    pub leech: bool,
 }
 
 impl CardEntry {
@@ -34,7 +34,7 @@ impl CardEntry {
 
 type CardDb = HashMap<blake3::Hash, CardEntry>;
 
-fn get_db(db_path: &Path) -> Result<CardDb> {
+pub fn get_db(db_path: &Path) -> Result<CardDb> {
     let data: Vec<CardEntry> = serde_json::from_str(
         &fs::read_to_string(db_path)
             .with_context(|| format!("Error reading `{}`", db_path.display()))?,
@@ -53,6 +53,14 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
         serde_json::to_string(&data).context("Error serializing db")?,
     )
     .with_context(|| format!("Error writing to `{}`", db_path.display()))
+}
+
+pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
+    let mut card_db = get_db(db_path)?;
+    if card_db.remove(&id).is_none() {
+        bail!("Card with id {} not found", id);
+    }
+    write_db(db_path, &card_db)
 }
 
 pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {

@@ -6,7 +6,6 @@ mod tui;
 use crate::card::Card;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use db::update_db;
 use env_logger::Env;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -78,6 +77,14 @@ enum Commands {
 
         #[arg(long, value_enum, default_value_t = Algo::SM2)]
         algorithm: Algo,
+
+        /// Tags to filter cards
+        #[arg(long)]
+        tags: Vec<String>,
+
+        /// include orphaned cards
+        #[arg(long)]
+        include_orphans: bool,
     },
 }
 
@@ -131,11 +138,14 @@ fn main() -> Result<()> {
             } else {
                 vec![]
             };
-            update_db(&args.db, all_cards)?;
+            db::update_db(&args.db, all_cards)?;
         }
         Commands::Audit {} => {
             let mut terminal = tui::init()?;
-            let app_result = App::default().run(&mut terminal);
+            let db = db::get_db(&args.db)?;
+            let cards = db.into_values().filter(|c| c.orphan || c.leech).collect();
+            let app_result = App::new(cards, Box::new(move |id| db::delete_card(&args.db, id)))
+                .run(&mut terminal);
             tui::restore()?;
             app_result?
         }

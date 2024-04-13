@@ -19,8 +19,8 @@ pub struct Card {
     pub id: blake3::Hash,
     pub file: PathBuf,
     pub line: u64,
-    pub question: String,
-    pub answer: String,
+    pub prompt: String,
+    pub response: String,
     pub tags: Vec<String>,
 }
 
@@ -45,7 +45,7 @@ fn strip_tags(line: &str) -> Result<String> {
 struct ParseState {
     card_lines: Vec<String>,
     tags: Vec<String>,
-    question: Option<String>,
+    prompt: Option<String>,
     first_line: Option<u64>,
 }
 
@@ -64,9 +64,9 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
         if CARD_RE.is_match(line) {
             if let Some(caps) = ONE_LINE_CARD_RE.captures(line) {
                 log::debug!("caps: {:?}", caps);
-                let question = caps
+                let prompt = caps
                     .get(1)
-                    .context("error parsing card question")?
+                    .context("error parsing card prompt")?
                     .as_str()
                     .trim();
                 let full_answer = caps.get(2).context("error parsing card answer")?.as_str();
@@ -75,19 +75,19 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     id: blake3::hash(line.as_bytes()),
                     file: PathBuf::from(file),
                     line: line_number as u64,
-                    question: question.to_string(),
-                    answer: strip_tags(full_answer)?.to_string(),
+                    prompt: prompt.to_string(),
+                    response: strip_tags(full_answer)?.to_string(),
                     tags,
                 });
                 state = ParseState::default();
             } else if MULTI_LINE_CARD_RE.is_match(line) {
-                state.question = Some(strip_tags(line)?);
+                state.prompt = Some(strip_tags(line)?);
                 state.card_lines.push(line.to_string());
                 state.first_line = Some(line_number as u64);
                 state.tags = parse_tags(line);
             }
         } else if END_OF_CARD_RE.is_match(line) && !state.card_lines.is_empty() {
-            if let (Some(quest), Some(line)) = (state.question.clone(), state.first_line) {
+            if let (Some(quest), Some(line)) = (state.prompt.clone(), state.first_line) {
                 let id = blake3::hash(state.card_lines.join("\n").as_bytes());
                 let answer = state
                     .card_lines
@@ -99,8 +99,8 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     id,
                     file: PathBuf::from(file),
                     line,
-                    question: quest,
-                    answer,
+                    prompt: quest,
+                    response: answer,
                     tags: state.tags,
                 });
                 state = ParseState::default();
@@ -128,15 +128,15 @@ mod tests {
         assert_eq!(card.file.to_str(), Some("/tmp/test2.md"));
         assert_eq!(card.line, 0);
         assert_eq!(
-            card.question,
+            card.prompt,
             "What is the answer to life, the universe, and everything?"
         );
-        assert_eq!(card.answer, "42\nand stuff");
+        assert_eq!(card.response, "42\nand stuff");
         assert_eq!(card.tags, vec!["#flashcard"]);
         let card = &cards[1];
         assert_eq!(card.line, 4);
-        assert_eq!(card.question, "q1");
-        assert_eq!(card.answer, "a1");
+        assert_eq!(card.prompt, "q1");
+        assert_eq!(card.response, "a1");
         assert!(card.tags.is_empty());
     }
 
@@ -151,10 +151,10 @@ mod tests {
         assert_eq!(card.file.to_str(), Some("/tmp/test.md"));
         assert_eq!(card.line, 0);
         assert_eq!(
-            card.question,
+            card.prompt,
             "What is the answer to life, the universe, and everything?"
         );
-        assert_eq!(card.answer, "42");
+        assert_eq!(card.response, "42");
         assert_eq!(card.tags, vec!["#flashcard", "#foo", "#test"]);
 
         let data = "q1:a1 🧠 ";
@@ -163,8 +163,8 @@ mod tests {
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.line, 0);
-        assert_eq!(card.question, "q1");
-        assert_eq!(card.answer, "a1");
+        assert_eq!(card.prompt, "q1");
+        assert_eq!(card.response, "a1");
         assert!(card.tags.is_empty());
 
         let data = "";
@@ -196,8 +196,8 @@ mod tests {
             file: PathBuf::from("test.rs"),
             line: 42,
             tags: vec![],
-            question: "What is the answer to life, the universe, and everything?".to_string(),
-            answer: "42".to_string(),
+            prompt: "What is the answer to life, the universe, and everything?".to_string(),
+            response: "42".to_string(),
         };
         assert_eq!(card.file.to_str(), Some("test.rs"));
         assert_eq!(card.line, 42);
@@ -211,8 +211,8 @@ mod tests {
             file: PathBuf::from("test.rs"),
             line: 42,
             tags: vec!["test".to_string()],
-            question: "What is the answer to life, the universe, and everything?".to_string(),
-            answer: "42".to_string(),
+            prompt: "What is the answer to life, the universe, and everything?".to_string(),
+            response: "42".to_string(),
         };
         let json = serde_json::to_string(&card)?;
         let card2: Card = serde_json::from_str(&json)?;

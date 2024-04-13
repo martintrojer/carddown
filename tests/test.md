@@ -13,7 +13,7 @@ You can also create decks with micro cards by adding various tags:
 How many people are bitten by snakes each year? : 5.3M 🧠 #nature #travel
 How many people die each year from snake bites? : ~130k 🧠 #nature #travel
 
-Now let's create some more complex cards. 
+Now let's create some more complex cards.
 
 We end the card with a horizontal line which can defined with :
 \-\-\-, \- \- \-, \*\*\*, \* \* \*
