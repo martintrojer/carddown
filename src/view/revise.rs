@@ -81,6 +81,9 @@ impl App {
 
     fn update_card_state(&mut self, quality: Quality) {
         self.revealed = false;
+        if self.cards.is_empty() || self.current_card >= self.cards.len() {
+            return;
+        }
         if self.current_card < (self.cards.len() - 1) {
             self.current_card += 1;
         }
@@ -101,25 +104,33 @@ impl App {
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char('q') | KeyCode::Char('Q') => self.exit(),
-            KeyCode::Char(' ') => self.revealed = true,
+            KeyCode::Char('q') | KeyCode::Char('Q') => {
+                if self.help {
+                    self.help = false;
+                } else {
+                    self.exit();
+                }
+            }
+            KeyCode::Char(' ') if !self.help => self.revealed = true,
             KeyCode::Char('?') => self.help = !self.help,
-            KeyCode::Char('0') | KeyCode::Char('a') => {
+            KeyCode::Char('0') | KeyCode::Char('a') if !self.help => {
                 self.update_card_state(Quality::IncorrectAndForgotten)
             }
-            KeyCode::Char('1') | KeyCode::Char('d') => {
+            KeyCode::Char('1') | KeyCode::Char('d') if !self.help => {
                 self.update_card_state(Quality::IncorrectButRemembered)
             }
-            KeyCode::Char('2') | KeyCode::Char('g') => {
+            KeyCode::Char('2') | KeyCode::Char('g') if !self.help => {
                 self.update_card_state(Quality::IncorrectButEasyToRecall)
             }
-            KeyCode::Char('3') | KeyCode::Char('j') => {
+            KeyCode::Char('3') | KeyCode::Char('j') if !self.help => {
                 self.update_card_state(Quality::CorrectWithDifficulty)
             }
-            KeyCode::Char('4') | KeyCode::Char('l') => {
+            KeyCode::Char('4') | KeyCode::Char('l') if !self.help => {
                 self.update_card_state(Quality::CorrectWithHesitation)
             }
-            KeyCode::Char('5') | KeyCode::Char('\'') => self.update_card_state(Quality::Perfect),
+            KeyCode::Char('5') | KeyCode::Char('\'') if !self.help => {
+                self.update_card_state(Quality::Perfect)
+            }
             _ => {}
         }
     }
@@ -127,6 +138,77 @@ impl App {
     fn exit(&mut self) {
         (self.update_fn)(std::mem::take(&mut self.cards)).unwrap();
         self.exit = true;
+    }
+
+    fn help(&self) -> (Block, Text) {
+        let title = Title::from(" Key Bindings ".bold());
+        let secs = self.started.elapsed().as_secs();
+        let min = secs / 60;
+        let secs = secs % 60;
+        let instructions = Title::from(Line::from(vec![
+            " Quit ".into(),
+            "<Q> ".bold(),
+            "Elapsed ".into(),
+            format!("{}:{:02} ", min, secs).bold(),
+        ]));
+        let block = Block::default()
+            .title(title.alignment(Alignment::Center))
+            .title(
+                instructions
+                    .alignment(Alignment::Center)
+                    .position(Position::Bottom),
+            )
+            .borders(Borders::ALL)
+            .border_set(border::ROUNDED);
+
+        let counter_text = Text::from(vec![
+            Line::from(vec![]),
+            Line::from(vec!["Qualities".into()]),
+            Line::from(vec![]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::IncorrectAndForgotten as u8,
+                'a',
+                Quality::IncorrectAndForgotten
+            )
+            .red()]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::IncorrectButRemembered as u8,
+                'd',
+                Quality::IncorrectButRemembered
+            )
+            .red()]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::IncorrectButEasyToRecall as u8,
+                'g',
+                Quality::IncorrectButEasyToRecall
+            )
+            .red()]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::CorrectWithDifficulty as u8,
+                'j',
+                Quality::CorrectWithDifficulty
+            )
+            .yellow()]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::CorrectWithHesitation as u8,
+                'l',
+                Quality::CorrectWithHesitation
+            )
+            .yellow()]),
+            Line::from(vec![format!(
+                "{} or {}: {:?}",
+                Quality::Perfect as u8,
+                '\'',
+                Quality::Perfect
+            )
+            .green()]),
+        ]);
+        (block, counter_text)
     }
 
     fn card_revise(&self) -> (Block, Text) {
@@ -163,54 +245,8 @@ impl App {
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
 
-        let counter_text = if self.help {
-            Text::from(vec![
-                Line::from(vec![]),
-                Line::from(vec!["Qualities".into()]),
-                Line::from(vec![]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::IncorrectAndForgotten as u8,
-                    'a',
-                    Quality::IncorrectAndForgotten
-                )
-                .red()]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::IncorrectButRemembered as u8,
-                    'd',
-                    Quality::IncorrectButRemembered
-                )
-                .red()]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::IncorrectButEasyToRecall as u8,
-                    'g',
-                    Quality::IncorrectButEasyToRecall
-                )
-                .red()]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::CorrectWithDifficulty as u8,
-                    'j',
-                    Quality::CorrectWithDifficulty
-                )
-                .yellow()]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::CorrectWithHesitation as u8,
-                    'l',
-                    Quality::CorrectWithHesitation
-                )
-                .yellow()]),
-                Line::from(vec![format!(
-                    "{}/{}: {:?}",
-                    Quality::Perfect as u8,
-                    '\'',
-                    Quality::Perfect
-                )
-                .green()]),
-            ])
+        let counter_text = if self.cards.is_empty() || self.current_card >= self.cards.len() {
+            Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
             let card = self.cards.get(self.current_card).unwrap();
             let mut lines: Vec<Line> = Vec::new();
@@ -252,7 +288,11 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let (block, counter_text) = self.card_revise();
+        let (block, counter_text) = if self.help {
+            self.help()
+        } else {
+            self.card_revise()
+        };
         Paragraph::new(counter_text)
             .centered()
             .block(block)
