@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Local};
 use ratatui::prelude::*;
 use std::io;
 use std::time::Duration;
@@ -182,8 +183,11 @@ impl App {
                 Line::from(vec!["Last Reviewed".bold()]),
                 Line::from(vec![card
                     .last_reviewed
-                    .map(|d| d.to_string())
-                    .unwrap_or("Never".to_string())
+                    .map(|d| {
+                        let l: DateTime<Local> = DateTime::from(d);
+                        l.format("%Y-%m-%d %H:%M").to_string()
+                    })
+                    .unwrap_or("never".to_string())
                     .into()]),
                 Line::from(vec![]),
                 Line::from(vec!["File".bold()]),

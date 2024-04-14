@@ -33,7 +33,7 @@ impl Quality {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
     ease_factor: f64,
@@ -50,6 +50,12 @@ impl CardState {
             interval: 0,
             repetitions: 0,
         }
+    }
+}
+
+impl Default for CardState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

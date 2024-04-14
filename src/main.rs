@@ -5,6 +5,8 @@ mod view;
 
 use crate::algorithm::Algo;
 use crate::card::Card;
+use crate::db::CardDb;
+use crate::db::CardEntry;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
@@ -48,6 +50,10 @@ enum Commands {
         /// File types to parse
         #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
         file_types: Vec<String>,
+
+        /// Full scan (different from default incremental), will generate orphans if found
+        #[arg(long)]
+        full: bool,
     },
     /// Audit the card database for orphaned and leech cards
     Audit {},
@@ -110,6 +116,24 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
         .map(|xs| xs.into_iter().flatten().collect())
 }
 
+fn filter_cards(
+    db: CardDb,
+    tags: HashSet<&str>,
+    include_orphans: bool,
+    leech_method: LeechMethod,
+) -> Vec<CardEntry> {
+    let today = chrono::Local::today();
+    db.into_values()
+        .filter(|c| {
+            let next_date = today + chrono::Duration::days(c.state.interval as i64);
+            next_date >= today
+        })
+        .filter(|c| tags.is_empty() || c.card.tags.iter().any(|t| tags.contains(t.as_str())))
+        .filter(|c| include_orphans || !c.orphan)
+        .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
+        .collect()
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     if !PathBuf::from(&**DB_PATH).exists() {
@@ -122,6 +146,7 @@ fn main() -> Result<()> {
             file,
             folder,
             file_types,
+            full,
         } => {
             let all_cards = if let Some(folder) = folder {
                 parse_cards_from_folder(&folder, &file_types)?
@@ -130,7 +155,7 @@ fn main() -> Result<()> {
             } else {
                 vec![]
             };
-            db::update_db(&args.db, all_cards)?;
+            db::update_db(&args.db, all_cards, full)?;
         }
         Commands::Audit {} => {
             let db = db::get_db(&args.db)?;
@@ -152,20 +177,8 @@ fn main() -> Result<()> {
             include_orphans,
         } => {
             let db = db::get_db(&args.db)?;
-            let today = chrono::Local::today();
             let tags: HashSet<&str> = HashSet::from_iter(tags.iter().map(|s| s.as_str()));
-            let mut cards: Vec<_> = db
-                .into_values()
-                .filter(|c| {
-                    let next_date = today + chrono::Duration::days(c.state.interval as i64);
-                    next_date >= today
-                })
-                .filter(|c| {
-                    tags.is_empty() || c.card.tags.iter().any(|t| tags.contains(t.as_str()))
-                })
-                .filter(|c| include_orphans || !c.orphan)
-                .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
-                .collect();
+            let mut cards = filter_cards(db, tags, include_orphans, leech_method);
             cards.shuffle(&mut rand::thread_rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             let mut terminal = view::init()?;

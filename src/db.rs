@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CardEntry {
     pub card: Card,
     pub state: CardState,
@@ -32,7 +32,7 @@ impl CardEntry {
     }
 }
 
-type CardDb = HashMap<blake3::Hash, CardEntry>;
+pub type CardDb = HashMap<blake3::Hash, CardEntry>;
 
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
     let data: Vec<CardEntry> = serde_json::from_str(
@@ -63,15 +63,15 @@ pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
     write_db(db_path, &card_db)
 }
 
-pub fn update_cards(db_path: &Path, cards: &[CardEntry]) -> Result<()> {
+pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
     let mut card_db = get_db(db_path)?;
     for card in cards {
-        card_db.insert(card.card.id, card.clone());
+        card_db.insert(card.card.id, card);
     }
     write_db(db_path, &card_db)
 }
 
-pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
+pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<()> {
     if found_cards.is_empty() {
         bail!("No cards to add to db");
     }
@@ -117,11 +117,13 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
     }
 
     // orphaned cards
-    for id in existing_ids(&card_db).difference(&found_ids) {
-        if let Some(entry) = card_db.get_mut(id) {
-            entry.orphan = true;
+    if full {
+        for id in existing_ids(&card_db).difference(&found_ids) {
+            if let Some(entry) = card_db.get_mut(id) {
+                entry.orphan = true;
+            }
+            orphan_ctr += 1;
         }
-        orphan_ctr += 1;
     }
 
     if new_ctr == 0 {
@@ -143,4 +145,155 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>) -> Result<()> {
     }
 
     write_db(db_path, &card_db)
+}
+
+#[cfg(test)]
+mod test {
+
+    use tempfile::NamedTempFile;
+
+    use super::*;
+
+    fn write_a_db(data: Vec<CardEntry>) -> (NamedTempFile, CardDb) {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let db = data
+            .into_iter()
+            .map(|entry| (entry.card.id, entry))
+            .collect();
+        write_db(&file.path(), &db).unwrap();
+        (file, db)
+    }
+
+    fn get_card_entries() -> Vec<CardEntry> {
+        let card = Card {
+            id: blake3::hash(b"foo"),
+            file: Path::new("foo").to_path_buf(),
+            line: 0,
+            prompt: "foo".to_string(),
+            response: "bar".to_string(),
+            tags: vec!["#foo".to_string()],
+        };
+        let card2 = Card {
+            id: blake3::hash(b"baz"),
+            file: Path::new("baz").to_path_buf(),
+            line: 0,
+            prompt: "baz".to_string(),
+            response: "bar".to_string(),
+            tags: vec!["#baz".to_string()],
+        };
+        vec![
+            CardEntry {
+                card,
+                state: CardState::new(),
+                last_reviewed: None,
+                failed_count: 0,
+                orphan: true,
+                leech: false,
+            },
+            CardEntry {
+                card: card2,
+                state: CardState::new(),
+                last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
+                failed_count: 1,
+                orphan: false,
+                leech: true,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_get_db() {
+        let (file, db) = write_a_db(get_card_entries());
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(db, read_db);
+    }
+
+    #[test]
+    fn test_delete_card() {
+        let (file, mut db) = write_a_db(get_card_entries());
+        let id = db.keys().next().unwrap().clone();
+        delete_card(&file.path(), id).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        db.remove(&id);
+        assert_eq!(db, read_db);
+    }
+
+    #[test]
+    fn test_update_cards() {
+        let (file, mut db) = write_a_db(get_card_entries());
+        let mut entry = get_card_entries().pop().unwrap();
+        db.get_mut(&entry.card.id).unwrap().state.interval = 1;
+        entry.state.interval = 1;
+        update_cards(&file.path(), vec![entry]).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(db, read_db);
+    }
+
+    #[test]
+    fn test_update_db_update_card() {
+        let (file, _) = write_a_db(get_card_entries());
+        let mut entry = get_card_entries().pop().unwrap();
+        entry.card.prompt = "new prompt".to_string();
+        update_db(&file.path(), vec![entry.card.clone()], false).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(
+            read_db.get(&entry.card.id).unwrap().card.prompt,
+            "new prompt"
+        );
+    }
+
+    #[test]
+    fn test_update_db_unorphan() {
+        let (file, _) = write_a_db(get_card_entries());
+        let entry = get_card_entries().remove(0);
+        assert!(entry.orphan);
+        update_db(&file.path(), vec![entry.card.clone()], false).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(read_db.get(&entry.card.id).unwrap().orphan, false);
+    }
+
+    #[test]
+    fn test_update_db_orphan() {
+        let (file, _) = write_a_db(get_card_entries());
+        let entry = get_card_entries().remove(1);
+        assert!(!entry.orphan);
+        let card = Card {
+            id: blake3::hash(b"new"),
+            file: Path::new("new").to_path_buf(),
+            line: 0,
+            prompt: "new".to_string(),
+            response: "new".to_string(),
+            tags: vec!["#new".to_string()],
+        };
+        update_db(&file.path(), vec![card], true).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        assert!(read_db.get(&entry.card.id).unwrap().orphan);
+    }
+
+    #[test]
+    fn test_update_db_new_card() {
+        let (file, mut db) = write_a_db(get_card_entries());
+        let card = Card {
+            id: blake3::hash(b"new"),
+            file: Path::new("new").to_path_buf(),
+            line: 0,
+            prompt: "new".to_string(),
+            response: "new".to_string(),
+            tags: vec!["#new".to_string()],
+        };
+        update_db(&file.path(), vec![card.clone()], false).unwrap();
+        let read_db = get_db(&file.path()).unwrap();
+        db.insert(
+            card.id,
+            CardEntry {
+                card,
+                state: CardState::new(),
+                last_reviewed: None,
+                failed_count: 0,
+                orphan: false,
+                leech: false,
+            },
+        );
+        assert_eq!(db, read_db);
+    }
 }

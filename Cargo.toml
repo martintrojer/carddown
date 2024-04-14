@@ -20,3 +20,6 @@ regex = "*"
 serde = "*"
 serde_json = "*"
 walkdir = "*"
+
+[dev-dependencies]
+tempfile = "*"

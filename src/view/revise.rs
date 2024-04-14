@@ -1,6 +1,7 @@
 use crate::algorithm::sm2::Sm2;
 use crate::algorithm::{Algo, Algorithm, Quality};
 use anyhow::Result;
+use chrono::{DateTime, Local};
 use ratatui::prelude::*;
 use std::io;
 use std::time::{Duration, Instant};
@@ -22,7 +23,7 @@ pub struct App {
     max_duration: usize,
     revealed: bool,
     started: Instant,
-    update_fn: Box<dyn Fn(&[CardEntry]) -> Result<()>>,
+    update_fn: Box<dyn Fn(Vec<CardEntry>) -> Result<()>>,
 }
 
 impl App {
@@ -31,7 +32,7 @@ impl App {
         algorithm: Algo,
         max_duration: usize,
         leech_threshold: usize,
-        update_fn: Box<dyn Fn(&[CardEntry]) -> Result<()>>,
+        update_fn: Box<dyn Fn(Vec<CardEntry>) -> Result<()>>,
     ) -> Self {
         Self {
             algorithm,
@@ -103,18 +104,28 @@ impl App {
             KeyCode::Char('q') | KeyCode::Char('Q') => self.exit(),
             KeyCode::Char(' ') => self.revealed = true,
             KeyCode::Char('?') => self.help = !self.help,
-            KeyCode::Char('0') => self.update_card_state(Quality::IncorrectAndForgotten),
-            KeyCode::Char('1') => self.update_card_state(Quality::IncorrectButRemembered),
-            KeyCode::Char('2') => self.update_card_state(Quality::IncorrectButEasyToRecall),
-            KeyCode::Char('3') => self.update_card_state(Quality::CorrectWithDifficulty),
-            KeyCode::Char('4') => self.update_card_state(Quality::CorrectWithHesitation),
-            KeyCode::Char('5') => self.update_card_state(Quality::Perfect),
+            KeyCode::Char('0') | KeyCode::Char('a') => {
+                self.update_card_state(Quality::IncorrectAndForgotten)
+            }
+            KeyCode::Char('1') | KeyCode::Char('d') => {
+                self.update_card_state(Quality::IncorrectButRemembered)
+            }
+            KeyCode::Char('2') | KeyCode::Char('g') => {
+                self.update_card_state(Quality::IncorrectButEasyToRecall)
+            }
+            KeyCode::Char('3') | KeyCode::Char('j') => {
+                self.update_card_state(Quality::CorrectWithDifficulty)
+            }
+            KeyCode::Char('4') | KeyCode::Char('l') => {
+                self.update_card_state(Quality::CorrectWithHesitation)
+            }
+            KeyCode::Char('5') | KeyCode::Char('\'') => self.update_card_state(Quality::Perfect),
             _ => {}
         }
     }
 
     fn exit(&mut self) {
-        (self.update_fn)(&self.cards).unwrap();
+        (self.update_fn)(std::mem::take(&mut self.cards)).unwrap();
         self.exit = true;
     }
 
@@ -128,7 +139,7 @@ impl App {
             .bold(),
         );
         let secs = self.started.elapsed().as_secs();
-        let min = (secs / 60) as u64;
+        let min = secs / 60;
         let secs = secs % 60;
         let instructions = Title::from(Line::from(vec![
             " Quit ".into(),
@@ -158,77 +169,81 @@ impl App {
                 Line::from(vec!["Qualities".into()]),
                 Line::from(vec![]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::IncorrectAndForgotten as u8,
+                    'a',
                     Quality::IncorrectAndForgotten
                 )
                 .red()]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::IncorrectButRemembered as u8,
+                    'd',
                     Quality::IncorrectButRemembered
                 )
                 .red()]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::IncorrectButEasyToRecall as u8,
+                    'g',
                     Quality::IncorrectButEasyToRecall
                 )
                 .red()]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::CorrectWithDifficulty as u8,
+                    'j',
                     Quality::CorrectWithDifficulty
                 )
                 .yellow()]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::CorrectWithHesitation as u8,
+                    'l',
                     Quality::CorrectWithHesitation
                 )
                 .yellow()]),
                 Line::from(vec![format!(
-                    "{}: {:?}",
+                    "{}/{}: {:?}",
                     Quality::Perfect as u8,
+                    '\'',
                     Quality::Perfect
                 )
                 .green()]),
             ])
         } else {
             let card = self.cards.get(self.current_card).unwrap();
-            Text::from(vec![
-                if card.orphan {
-                    Line::from(vec!["Orphan".yellow().bold()])
-                } else if card.leech {
-                    Line::from(vec!["Leech".red().bold()])
-                } else {
-                    Line::from(vec!["".into()])
-                },
-                Line::from(vec![]),
-                Line::from(vec!["Prompt".bold()]),
-                Line::from(vec![card.card.prompt.clone().into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Response".bold()]),
-                if self.revealed {
-                    Line::from(vec![card.card.response.clone().into()])
-                } else {
-                    Line::from(vec![])
-                },
-                Line::from(vec![]),
-                Line::from(vec!["Last Reviewed".bold()]),
-                Line::from(vec![card
-                    .last_reviewed
-                    .map(|d| d.to_string())
-                    .unwrap_or("Never".to_string())
-                    .into()]),
-                Line::from(vec![]),
-                Line::from(vec!["File".bold()]),
-                Line::from(vec![
-                    card.card.file.to_string_lossy().into(),
-                    ":".into(),
-                    card.card.line.to_string().into(),
-                ]),
-            ])
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(if card.orphan {
+                Line::from(vec!["Orphan".yellow().bold()])
+            } else if card.leech {
+                Line::from(vec!["Leech".red().bold()])
+            } else {
+                Line::from(vec!["".into()])
+            });
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Prompt".bold()]));
+            lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Response".bold()]));
+            if self.revealed {
+                for l in card.card.response.lines() {
+                    lines.push(Line::from(vec![l.into()]));
+                }
+            } else {
+                lines.push(Line::from(vec!["<hidden>".into()]));
+            }
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Last Reviewed".bold()]));
+            lines.push(Line::from(vec![card
+                .last_reviewed
+                .map(|d| {
+                    let l: DateTime<Local> = DateTime::from(d);
+                    l.format("%Y-%m-%d %H:%M").to_string()
+                })
+                .unwrap_or("Never".to_string())
+                .into()]));
+            Text::from(lines)
         };
 
         (block, counter_text)
