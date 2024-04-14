@@ -20,7 +20,7 @@ pub struct CardEntry {
 }
 
 impl CardEntry {
-    fn new(card: Card) -> Self {
+    pub fn new(card: Card) -> Self {
         Self {
             card,
             state: CardState::new(),
