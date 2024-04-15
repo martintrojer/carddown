@@ -4,7 +4,10 @@ use std::{
     path::Path,
 };
 
-use crate::{algorithm::CardState, card::Card};
+use crate::{
+    algorithm::{CardState, Quality},
+    card::Card,
+};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -23,7 +26,7 @@ impl CardEntry {
     pub fn new(card: Card) -> Self {
         Self {
             card,
-            state: CardState::new(),
+            state: CardState::default(),
             last_reviewed: None,
             failed_count: 0,
             orphan: false,
@@ -33,6 +36,43 @@ impl CardEntry {
 }
 
 pub type CardDb = HashMap<blake3::Hash, CardEntry>;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct GlobalState {
+    optimal_factor: HashMap<Quality, f64>,
+}
+
+impl Default for GlobalState {
+    fn default() -> Self {
+        let mut optimal_factor = HashMap::new();
+        optimal_factor.insert(Quality::Perfect, 2.5);
+        optimal_factor.insert(Quality::CorrectWithHesitation, 2.5);
+        optimal_factor.insert(Quality::CorrectWithDifficulty, 2.5);
+        optimal_factor.insert(Quality::IncorrectButEasyToRecall, 2.5);
+        optimal_factor.insert(Quality::IncorrectButRemembered, 2.5);
+        optimal_factor.insert(Quality::IncorrectAndForgotten, 2.5);
+        Self { optimal_factor }
+    }
+}
+
+pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
+    if state_path.exists() {
+        let data = fs::read_to_string(state_path)
+            .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
+        serde_json::from_str(&data).context("Failed to deserialize state.json")
+    } else {
+        log::info!("No global state found, using default");
+        Ok(GlobalState::default())
+    }
+}
+
+pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
+    fs::write(
+        state_path,
+        serde_json::to_string(state).context("Failed to serialize state.json")?,
+    )
+    .with_context(|| format!("Error writing to `{}`", state_path.display()))
+}
 
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
     let data: Vec<CardEntry> = serde_json::from_str(
@@ -164,6 +204,12 @@ mod test {
         (file, db)
     }
 
+    fn write_a_global_state(state: &GlobalState) -> NamedTempFile {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        write_global_state(&file.path(), state).unwrap();
+        file
+    }
+
     fn get_card_entries() -> Vec<CardEntry> {
         let card = Card {
             id: blake3::hash(b"foo"),
@@ -184,7 +230,7 @@ mod test {
         vec![
             CardEntry {
                 card,
-                state: CardState::new(),
+                state: CardState::default(),
                 last_reviewed: None,
                 failed_count: 0,
                 orphan: true,
@@ -192,7 +238,7 @@ mod test {
             },
             CardEntry {
                 card: card2,
-                state: CardState::new(),
+                state: CardState::default(),
                 last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
                 failed_count: 1,
                 orphan: false,
@@ -206,6 +252,14 @@ mod test {
         let (file, db) = write_a_db(get_card_entries());
         let read_db = get_db(&file.path()).unwrap();
         assert_eq!(db, read_db);
+    }
+
+    #[test]
+    fn test_get_global_state() {
+        let state = GlobalState::default();
+        let file = write_a_global_state(&state);
+        let read_state = get_global_state(&file.path()).unwrap();
+        assert_eq!(state, read_state);
     }
 
     #[test]
@@ -287,7 +341,7 @@ mod test {
             card.id,
             CardEntry {
                 card,
-                state: CardState::new(),
+                state: CardState::default(),
                 last_reviewed: None,
                 failed_count: 0,
                 orphan: false,

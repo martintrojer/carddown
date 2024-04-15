@@ -3,6 +3,8 @@ pub mod sm2;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
+use crate::db::GlobalState;
+
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Algo {
     SM2,
@@ -12,7 +14,7 @@ pub enum Algo {
 }
 
 // An integer from 0-5 indicating how easily the information was remembered today
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Quality {
     Perfect = 5,
     CorrectWithHesitation = 4,
@@ -33,7 +35,7 @@ impl Quality {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
     ease_factor: f64,
@@ -43,8 +45,8 @@ pub struct CardState {
     repetitions: u64,
 }
 
-impl CardState {
-    pub fn new() -> Self {
+impl Default for CardState {
+    fn default() -> Self {
         Self {
             ease_factor: 2.5,
             interval: 0,
@@ -53,12 +55,6 @@ impl CardState {
     }
 }
 
-impl Default for CardState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub trait Algorithm {
-    fn next_interval(&self, quality: &Quality, state: &CardState) -> CardState;
+    fn next_interval(&self, quality: &Quality, state: &mut CardState, global: &mut GlobalState);
 }

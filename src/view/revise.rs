@@ -6,7 +6,7 @@ use ratatui::prelude::*;
 use std::io;
 use std::time::{Duration, Instant};
 
-use crate::db::CardEntry;
+use crate::db::{CardEntry, GlobalState};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     symbols::border,
@@ -18,21 +18,23 @@ pub struct App {
     cards: Vec<CardEntry>,
     current_card: usize,
     exit: bool,
+    global_state: GlobalState,
     help: bool,
     leech_threshold: usize,
     max_duration: usize,
     revealed: bool,
     started: Instant,
-    update_fn: Box<dyn Fn(Vec<CardEntry>) -> Result<()>>,
+    update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
 }
 
 impl App {
     pub fn new(
         cards: Vec<CardEntry>,
         algorithm: Algo,
+        global_state: GlobalState,
         max_duration: usize,
         leech_threshold: usize,
-        update_fn: Box<dyn Fn(Vec<CardEntry>) -> Result<()>>,
+        update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
         Self {
             algorithm,
@@ -40,6 +42,7 @@ impl App {
             update_fn,
             current_card: 0,
             exit: false,
+            global_state,
             help: false,
             leech_threshold,
             max_duration,
@@ -81,10 +84,12 @@ impl App {
 
     fn update_card_state(&mut self, quality: Quality) {
         self.revealed = false;
-        if self.cards.is_empty() || self.current_card >= self.cards.len() {
+        if self.cards.is_empty() {
             return;
         }
-        if self.current_card < (self.cards.len() - 1) {
+        if self.current_card >= self.cards.len() {
+            self.exit();
+        } else {
             self.current_card += 1;
         }
         if let Some(card) = self.cards.get_mut(self.current_card) {
@@ -92,7 +97,7 @@ impl App {
             let algorithm = match self.algorithm {
                 _ => Sm2 {},
             };
-            card.state = algorithm.next_interval(&quality, &card.state);
+            algorithm.next_interval(&quality, &mut card.state, &mut self.global_state);
             if quality.failed() {
                 card.failed_count += 1;
             }
@@ -136,7 +141,7 @@ impl App {
     }
 
     fn exit(&mut self) {
-        (self.update_fn)(std::mem::take(&mut self.cards)).unwrap();
+        (self.update_fn)(std::mem::take(&mut self.cards), &self.global_state).unwrap();
         self.exit = true;
     }
 

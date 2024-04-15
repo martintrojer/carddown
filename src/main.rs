@@ -27,6 +27,7 @@ lazy_static! {
         })
     );
     static ref DB_FILE_PATH: String = format!("{}/cards.json", *DB_PATH);
+    static ref STATE_FILE_PATH: String = format!("{}/state.json", *DB_PATH);
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -95,6 +96,10 @@ struct Args {
     /// Path to the database file
     #[arg(long, default_value = &**DB_FILE_PATH)]
     db: PathBuf,
+
+    /// Path to the state file
+    #[arg(long, default_value = &**STATE_FILE_PATH)]
+    state: PathBuf,
 }
 
 // walk file tree and parse all files
@@ -181,6 +186,7 @@ fn main() -> Result<()> {
             include_orphans,
         } => {
             let db = db::get_db(&args.db)?;
+            let state = db::get_global_state(&args.state)?;
             let tags: HashSet<&str> = HashSet::from_iter(tags.iter().map(|s| s.as_str()));
             let mut cards = filter_cards(db, tags, include_orphans, leech_method);
             cards.shuffle(&mut rand::thread_rng());
@@ -189,9 +195,13 @@ fn main() -> Result<()> {
             let res = view::revise::App::new(
                 cards,
                 algorithm,
+                state,
                 maximum_duration_of_session,
                 leech_failure_threshold,
-                Box::new(move |cards| db::update_cards(&args.db, cards)),
+                Box::new(move |cards, state| {
+                    let _ = db::update_cards(&args.db, cards);
+                    db::write_global_state(&args.state, state)
+                }),
             )
             .run(&mut terminal);
             view::restore()?;
