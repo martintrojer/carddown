@@ -97,7 +97,7 @@ impl App {
             let algorithm = match self.algorithm {
                 _ => Sm2 {},
             };
-            algorithm.next_interval(&quality, &mut card.state, &mut self.global_state);
+            algorithm.update_state(&quality, &mut card.state, &mut self.global_state);
             if quality.failed() {
                 card.failed_count += 1;
             }

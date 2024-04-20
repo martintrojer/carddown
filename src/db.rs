@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    algorithm::{CardState, Quality},
+    algorithm::{CardState, OptimalFactorMatrix},
     card::Card,
 };
 use anyhow::{bail, Context, Result};
@@ -37,22 +37,9 @@ impl CardEntry {
 
 pub type CardDb = HashMap<blake3::Hash, CardEntry>;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Default, Deserialize, PartialEq)]
 pub struct GlobalState {
-    optimal_factor: HashMap<Quality, f64>,
-}
-
-impl Default for GlobalState {
-    fn default() -> Self {
-        let mut optimal_factor = HashMap::new();
-        optimal_factor.insert(Quality::Perfect, 2.5);
-        optimal_factor.insert(Quality::CorrectWithHesitation, 2.5);
-        optimal_factor.insert(Quality::CorrectWithDifficulty, 2.5);
-        optimal_factor.insert(Quality::IncorrectButEasyToRecall, 2.5);
-        optimal_factor.insert(Quality::IncorrectButRemembered, 2.5);
-        optimal_factor.insert(Quality::IncorrectAndForgotten, 2.5);
-        Self { optimal_factor }
-    }
+    pub optimal_factor_matrix: OptimalFactorMatrix,
 }
 
 pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
@@ -188,7 +175,7 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
 
     use tempfile::NamedTempFile;
 

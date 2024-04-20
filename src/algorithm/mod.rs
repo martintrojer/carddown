@@ -1,7 +1,10 @@
 pub mod sm2;
+pub mod sm5;
 
 use clap::ValueEnum;
+use fixed::types::I57F7;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::db::GlobalState;
 
@@ -35,6 +38,11 @@ impl Quality {
     }
 }
 
+pub type EaseFactor = I57F7;
+
+// repetitions -> ease_factor -> optimal_factor
+pub type OptimalFactorMatrix = HashMap<u64, HashMap<EaseFactor, f64>>;
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
@@ -56,5 +64,14 @@ impl Default for CardState {
 }
 
 pub trait Algorithm {
-    fn next_interval(&self, quality: &Quality, state: &mut CardState, global: &mut GlobalState);
+    fn update_state(&self, quality: &Quality, state: &mut CardState, global: &mut GlobalState);
+}
+
+fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {
+    if ease_factor < 1.3 {
+        1.3
+    } else {
+        let q = *quality as usize;
+        ease_factor + 0.1 - (5 - q) as f64 * (0.08 + (5 - q) as f64 * 0.02)
+    }
 }

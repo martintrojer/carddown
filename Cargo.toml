@@ -12,6 +12,7 @@ chrono = { version = "*", features = ["serde"] }
 clap = { version = "*", features = ["derive"] }
 crossterm = "*"
 env_logger = "*"
+fixed = { version = "*", features = ["serde"] }
 lazy_static = "*"
 log = "*"
 rand = "*"
