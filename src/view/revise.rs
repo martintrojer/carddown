@@ -94,6 +94,7 @@ impl App {
         }
         if let Some(card) = self.cards.get_mut(self.current_card) {
             card.last_reviewed = Some(chrono::Utc::now());
+            card.revise_count += 1;
             let algorithm = match self.algorithm {
                 _ => Sm2 {},
             };

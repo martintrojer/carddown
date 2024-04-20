@@ -82,7 +82,7 @@ impl App {
                     }
                 }
             }
-            KeyCode::Left => {
+            KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('k') => {
                 if self.cards.is_empty() {
                     return;
                 }
@@ -90,7 +90,7 @@ impl App {
                     self.current_card -= 1;
                 }
             }
-            KeyCode::Right => {
+            KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('j') => {
                 if self.cards.is_empty() {
                     return;
                 }
@@ -180,6 +180,9 @@ impl App {
                 Line::from(vec!["Response".bold()]),
                 Line::from(vec![card.card.response.clone().into()]),
                 Line::from(vec![]),
+                Line::from(vec!["Review Count".bold()]),
+                Line::from(vec![card.revise_count.to_string().into()]),
+                Line::from(vec![]),
                 Line::from(vec!["Last Reviewed".bold()]),
                 Line::from(vec![card
                     .last_reviewed
@@ -189,6 +192,12 @@ impl App {
                     })
                     .unwrap_or("never".to_string())
                     .into()]),
+                Line::from(vec![]),
+                Line::from(vec!["Added".bold()]),
+                Line::from(vec![(|| {
+                    let l: DateTime<Local> = DateTime::from(card.added);
+                    l.format("%Y-%m-%d %H:%M").to_string().into()
+                })()]),
                 Line::from(vec![]),
                 Line::from(vec!["File".bold()]),
                 Line::from(vec![

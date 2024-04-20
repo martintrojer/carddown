@@ -14,23 +14,27 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CardEntry {
+    pub added: DateTime<Utc>,
     pub card: Card,
-    pub state: CardState,
-    pub last_reviewed: Option<DateTime<Utc>>,
     pub failed_count: u64,
-    pub orphan: bool,
+    pub last_reviewed: Option<DateTime<Utc>>,
     pub leech: bool,
+    pub orphan: bool,
+    pub revise_count: u64,
+    pub state: CardState,
 }
 
 impl CardEntry {
     pub fn new(card: Card) -> Self {
         Self {
+            added: Utc::now(),
             card,
-            state: CardState::default(),
-            last_reviewed: None,
             failed_count: 0,
-            orphan: false,
+            last_reviewed: None,
             leech: false,
+            orphan: false,
+            revise_count: 0,
+            state: CardState::default(),
         }
     }
 }
@@ -62,6 +66,10 @@ pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> 
 }
 
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
+    if !db_path.exists() {
+        log::info!("No db found, creating new one");
+        return Ok(HashMap::new());
+    }
     let data: Vec<CardEntry> = serde_json::from_str(
         &fs::read_to_string(db_path)
             .with_context(|| format!("Error reading `{}`", db_path.display()))?,
@@ -216,20 +224,24 @@ mod tests {
         };
         vec![
             CardEntry {
+                added: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap(),
                 card,
-                state: CardState::default(),
-                last_reviewed: None,
                 failed_count: 0,
-                orphan: true,
+                last_reviewed: None,
                 leech: false,
+                orphan: true,
+                revise_count: 1,
+                state: CardState::default(),
             },
             CardEntry {
+                added: "2011-11-11T11:11:11Z".parse::<DateTime<Utc>>().unwrap(),
                 card: card2,
-                state: CardState::default(),
-                last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
                 failed_count: 1,
-                orphan: false,
+                last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
                 leech: true,
+                orphan: false,
+                revise_count: 2,
+                state: CardState::default(),
             },
         ]
     }
@@ -324,17 +336,11 @@ mod tests {
         };
         update_db(&file.path(), vec![card.clone()], false).unwrap();
         let read_db = get_db(&file.path()).unwrap();
-        db.insert(
-            card.id,
-            CardEntry {
-                card,
-                state: CardState::default(),
-                last_reviewed: None,
-                failed_count: 0,
-                orphan: false,
-                leech: false,
-            },
+        db.insert(card.id, CardEntry::new(card));
+        assert_eq!(db.len(), read_db.len());
+        assert_eq!(
+            db.keys().collect::<HashSet<_>>(),
+            read_db.keys().collect::<HashSet<_>>()
         );
-        assert_eq!(db, read_db);
     }
 }

@@ -94,10 +94,7 @@ mod tests {
         assert_eq!(state.interval, 4);
         assert_eq!(state.repetitions, 1);
         assert_eq!(state.ease_factor, 2.6);
-        assert!(
-            get_optimal_factor(0, 2.6, &global.optimal_factor_matrix)
-            > 4.14
-        );
+        assert!(get_optimal_factor(0, 2.6, &global.optimal_factor_matrix) > 4.14);
         assert_eq!(
             get_optimal_factor(1, 5.6, &global.optimal_factor_matrix),
             5.6
@@ -107,11 +104,7 @@ mod tests {
         assert_eq!(state.interval, 11);
         assert_eq!(state.repetitions, 2);
         assert_eq!(state.ease_factor, 2.7);
-        assert!(
-            get_optimal_factor(1, 2.7, &global.optimal_factor_matrix) >
-            2.691
-        );
-
+        assert!(get_optimal_factor(1, 2.7, &global.optimal_factor_matrix) > 2.691);
 
         sm5.update_state(&Quality::Perfect, &mut state, &mut global);
         assert_eq!(state.interval, 31);

@@ -52,6 +52,10 @@ struct ParseState {
 pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
     let contents =
         fs::read_to_string(file).with_context(|| format!("Error reading `{}`", file.display()))?;
+    if contents.contains("@carddown-ignore") {
+        log::info!("ignoring file: {}", file.display());
+        return Ok(vec![]);
+    }
     let mut cards = vec![];
     let mut state = ParseState::default();
     for (line_number, line) in contents.lines().enumerate() {
@@ -116,16 +120,28 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::{self, NamedTempFile};
+
+    fn new_md_file() -> Result<NamedTempFile> {
+        tempfile::Builder::new()
+            .suffix(".md")
+            .tempfile()
+            .context("error creating tempfile")
+    }
 
     #[test]
     fn test_parse_multi_line_cards() {
+        let file = new_md_file().unwrap();
         let data =
             "What is the answer to life, the universe, and everything? #flashcard\n42\nand stuff\n---\n             q1:a1 🧠 ";
-        fs::write("/tmp/test2.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test2.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert_eq!(cards.len(), 2);
         let card = &cards[0];
-        assert_eq!(card.file.to_str(), Some("/tmp/test2.md"));
+        assert_eq!(
+            card.file.to_str(),
+            Some(format!("{}", file.path().display()).as_str())
+        );
         assert_eq!(card.line, 0);
         assert_eq!(
             card.prompt,
@@ -142,13 +158,17 @@ mod tests {
 
     #[test]
     fn test_parse_file() {
+        let file = new_md_file().unwrap();
         let data =
             "What is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
-        fs::write("/tmp/test.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
-        assert_eq!(card.file.to_str(), Some("/tmp/test.md"));
+        assert_eq!(
+            card.file.to_str(),
+            Some(format!("{}", file.path().display()).as_str())
+        );
         assert_eq!(card.line, 0);
         assert_eq!(
             card.prompt,
@@ -158,8 +178,8 @@ mod tests {
         assert_eq!(card.tags, vec!["#flashcard", "#foo", "#test"]);
 
         let data = "q1:a1 🧠 ";
-        fs::write("/tmp/test.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.line, 0);
@@ -168,18 +188,27 @@ mod tests {
         assert!(card.tags.is_empty());
 
         let data = "";
-        fs::write("/tmp/test.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert!(cards.is_empty());
 
         let data = " hello : there";
-        fs::write("/tmp/test.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert!(cards.is_empty());
 
         let data = "#flashcard\nq1\na1\n#flashcard\nq2\na2\n-";
-        fs::write("/tmp/test.md", data).unwrap();
-        let cards = parse_file(&PathBuf::from("/tmp/test.md")).unwrap();
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert!(cards.is_empty());
+    }
+
+    #[test]
+    fn test_parse_file_with_ignore() {
+        let file = new_md_file().unwrap();
+        let data = "@carddown-ignore\nWhat is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
         assert!(cards.is_empty());
     }
 
