@@ -41,14 +41,6 @@ enum LeechMethod {
 enum Commands {
     /// Scan file or folder for cards
     Scan {
-        /// Scan a single file for flashcards
-        #[arg(long)]
-        file: Option<PathBuf>,
-
-        /// Walk a directory and parse all matching files
-        #[arg(long, conflicts_with("file"))]
-        folder: Option<PathBuf>,
-
         /// File types to parse
         #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
         file_types: Vec<String>,
@@ -56,6 +48,9 @@ enum Commands {
         /// Full scan (default incremental), can generate orphans
         #[arg(long)]
         full: bool,
+
+        /// Path to file or folder to scan
+        path: PathBuf,
     },
     /// Audit the card database for orphaned and leech cards
     Audit {},
@@ -80,7 +75,7 @@ enum Commands {
 
         /// Tags to filter cards, no tags matches all cards
         #[arg(long)]
-        tags: Vec<String>,
+        tag: Vec<String>,
 
         /// include orphaned cards
         #[arg(long)]
@@ -91,7 +86,7 @@ enum Commands {
         #[arg(long, default_value_t = 0.0)]
         reverse_probability: f64,
 
-        /// Cram session. Review all cards regardless of interval if they haven't been reviewed
+        /// Cram session. Revise all cards regardless of interval if they haven't been revised
         /// in the last 12 hours. Does not effect state spaced repetition stats of the cards.
         #[arg(long)]
         cram: bool,
@@ -143,11 +138,11 @@ fn filter_cards(
     let today = chrono::Utc::now();
     db.into_values()
         .filter(|c| {
-            if let Some(last_reviewed) = c.last_reviewed {
+            if let Some(last_revised) = c.last_revised {
                 if cram_mode {
-                    today - last_reviewed > chrono::Duration::hours(12)
+                    today - last_revised > chrono::Duration::hours(12)
                 } else {
-                    let next_date = last_reviewed + chrono::Duration::days(c.state.interval as i64);
+                    let next_date = last_revised + chrono::Duration::days(c.state.interval as i64);
                     today >= next_date
                 }
             } else {
@@ -169,15 +164,14 @@ fn main() -> Result<()> {
     let args = Args::parse();
     match args.command {
         Commands::Scan {
-            file,
-            folder,
             file_types,
             full,
+            path,
         } => {
-            let all_cards = if let Some(folder) = folder {
-                parse_cards_from_folder(&folder, &file_types)?
-            } else if let Some(file) = file {
-                card::parse_file(&file)?
+            let all_cards = if path.is_dir() {
+                parse_cards_from_folder(&path, &file_types)?
+            } else if path.is_file() {
+                card::parse_file(&path)?
             } else {
                 vec![]
             };
@@ -202,12 +196,12 @@ fn main() -> Result<()> {
             maximum_cards_per_session,
             maximum_duration_of_session,
             reverse_probability,
-            tags,
+            tag: tags,
         } => {
             let db = db::get_db(&args.db)?;
             let state = db::get_global_state(&args.state)?;
-            let tags: HashSet<String> = HashSet::from_iter(tags.into_iter());
-            let mut cards = filter_cards(db, tags, include_orphans, leech_method, cram);
+            let tags_set: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
+            let mut cards = filter_cards(db, tags_set, include_orphans, leech_method, cram);
             cards.shuffle(&mut rand::thread_rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             let mut terminal = view::init()?;
@@ -218,6 +212,7 @@ fn main() -> Result<()> {
                 leech_failure_threshold,
                 maximum_duration_of_session,
                 reverse_probability,
+                tags,
                 Box::new(move |cards, state| {
                     // Dont update the database if we are in cram mode
                     if !cram {
@@ -313,7 +308,7 @@ mod tests {
         let mut db = get_card_db();
         let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
         entry.state.interval = 1;
-        entry.last_reviewed = Some(chrono::Utc::now());
+        entry.last_revised = Some(chrono::Utc::now());
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
@@ -327,7 +322,7 @@ mod tests {
         let mut db = get_card_db();
         let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
         entry.state.interval = 1;
-        entry.last_reviewed = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        entry.last_revised = Some(chrono::Utc::now() - chrono::Duration::days(1));
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
@@ -340,7 +335,7 @@ mod tests {
     fn test_filter_cards_cram_mode() {
         let mut db = get_card_db();
         let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
-        entry.last_reviewed = Some(chrono::Utc::now() - chrono::Duration::hours(13));
+        entry.last_revised = Some(chrono::Utc::now() - chrono::Duration::hours(13));
         entry.state.interval = 2;
         let tags = HashSet::new();
         let include_orphans = false;

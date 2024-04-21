@@ -180,12 +180,22 @@ impl App {
                 Line::from(vec!["Response".bold()]),
                 Line::from(vec![card.card.response.clone().into()]),
                 Line::from(vec![]),
-                Line::from(vec!["Review Count".bold()]),
+                Line::from(vec!["Tags".bold()]),
+                Line::from(vec![card
+                    .card
+                    .tags
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .into()]),
+                Line::from(vec![]),
+                Line::from(vec!["Revise Count".bold()]),
                 Line::from(vec![card.revise_count.to_string().into()]),
                 Line::from(vec![]),
-                Line::from(vec!["Last Reviewed".bold()]),
+                Line::from(vec!["Last Revised".bold()]),
                 Line::from(vec![card
-                    .last_reviewed
+                    .last_revised
                     .map(|d| {
                         let l: DateTime<Local> = DateTime::from(d);
                         l.format("%Y-%m-%d %H:%M").to_string()

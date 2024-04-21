@@ -6,12 +6,12 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
 
 ## Features
 
-  - Support many cards in a single file.
+  - Scans you notes files for flashcards with facts that you want to remember.
   - Keeps tracks of flashcard by hash of its contents, thus supports files being edited and cards moved around.
-  - Extracted cards and meta-data are stored in in a separate folder, the original files are never not modified.
-  - Supports tags, to filter your study sessions.
+  - Extracted cards and meta-data are stored in a separate folder, the original files are never not modified.
+  - Supports tags, enabling specific study sessions.
   - Supports multiple [spaced-repetition](https://en.wikipedia.org/wiki/Spaced_repetition) algorithms.
-  - No dependencies, fast, no binary formats.
+  - No dependencies, fast, human-readable non-binary formats.
 
 ## Installation
 
@@ -67,7 +67,7 @@ Options:
           [default: skip] [possible values: skip, warn]
       --algorithm <ALGORITHM>
           [default: sm5] [possible values: sm2, sm5, simple8]
-      --tags <TAGS>
+      --tag <TAG>
           Tags to filter cards, no tags matches all cards
       --include-orphans
           include orphaned cards
@@ -81,13 +81,12 @@ Options:
 You can scan your source files as many time as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-date aslong as the prompt/response or tags have changed.
 
 ```
-Usage: carddown scan [OPTIONS]
+Arguments:
+  <PATH>  Path for file or folder to scan
 
 Options:
-      --file <FILE>              Scan a single file for flashcards
-      --folder <FOLDER>          Walk a directory and parse all matching files
       --file-types <FILE_TYPES>  File types to parse [default: md txt org]
-      --full                     Full scan (default incremental), can generate orphans
+      --full                     Full scan (default incremental), can generate orphansUsage: carddown scan [OPTIONS]
 ```
 
 If `--full` flag is not set, CARDDOWN will do an incremental scan which will not generate orphan cards.

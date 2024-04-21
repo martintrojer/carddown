@@ -27,13 +27,14 @@ pub struct App {
     leech_threshold: usize,
     max_duration: usize,
     reverse_probability: f64,
+    tags: Vec<String>,
     #[allow(clippy::type_complexity)]
     update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ui: UiState,
 }
 
 impl App {
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn new(
         algorithm: Box<dyn Algorithm>,
         cards: Vec<CardEntry>,
@@ -41,6 +42,7 @@ impl App {
         leech_threshold: usize,
         max_duration: usize,
         reverse_probability: f64,
+        tags: Vec<String>,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
         Self {
@@ -51,6 +53,7 @@ impl App {
             leech_threshold,
             max_duration,
             reverse_probability,
+            tags,
             ui: UiState {
                 current_card: 0,
                 exit: false,
@@ -104,7 +107,7 @@ impl App {
         }
         update_meanq(&mut self.global_state, quality);
         if let Some(card) = self.cards.get_mut(self.ui.current_card) {
-            card.last_reviewed = Some(chrono::Utc::now());
+            card.last_revised = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm
                 .update_state(&quality, &mut card.state, &mut self.global_state);
@@ -229,9 +232,14 @@ impl App {
     fn card_revise(&self) -> (Block, Text) {
         let title = Title::from(
             format!(
-                " Revise Cards {}/{}",
+                " Revise Cards {}/{} [{}] ",
                 std::cmp::min(self.cards.len(), 1 + self.ui.current_card),
-                self.cards.len()
+                self.cards.len(),
+                if self.tags.is_empty() {
+                    "All Tags".to_string()
+                } else {
+                    self.tags.join(", ")
+                }
             )
             .bold(),
         );
@@ -291,9 +299,9 @@ impl App {
                 lines.push(Line::from(vec!["<hidden>".into()]));
             }
             lines.push(Line::from(vec![]));
-            lines.push(Line::from(vec!["Last Reviewed".bold()]));
+            lines.push(Line::from(vec!["Last Revised".bold()]));
             lines.push(Line::from(vec![card
-                .last_reviewed
+                .last_revised
                 .map(|d| {
                     let l: DateTime<Local> = DateTime::from(d);
                     l.format("%Y-%m-%d %H:%M").to_string()

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 pub struct CardEntry {
     pub added: DateTime<Utc>,
     pub card: Card,
-    pub last_reviewed: Option<DateTime<Utc>>,
+    pub last_revised: Option<DateTime<Utc>>,
     pub leech: bool,
     pub orphan: bool,
     pub revise_count: u64,
@@ -28,7 +28,7 @@ impl CardEntry {
         Self {
             added: Utc::now(),
             card,
-            last_reviewed: None,
+            last_revised: None,
             leech: false,
             orphan: false,
             revise_count: 0,
@@ -243,7 +243,7 @@ mod tests {
             CardEntry {
                 added: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap(),
                 card,
-                last_reviewed: None,
+                last_revised: None,
                 leech: false,
                 orphan: true,
                 revise_count: 1,
@@ -252,7 +252,7 @@ mod tests {
             CardEntry {
                 added: "2011-11-11T11:11:11Z".parse::<DateTime<Utc>>().unwrap(),
                 card: card2,
-                last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
+                last_revised: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
                 leech: true,
                 orphan: false,
                 revise_count: 2,
