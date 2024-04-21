@@ -216,7 +216,7 @@ mod tests {
             line: 0,
             prompt: "foo".to_string(),
             response: "bar".to_string(),
-            tags: vec!["#foo".to_string()],
+            tags: HashSet::from(["foo".to_string()]),
         };
         let card2 = Card {
             id: blake3::hash(b"baz"),
@@ -224,7 +224,7 @@ mod tests {
             line: 0,
             prompt: "baz".to_string(),
             response: "bar".to_string(),
-            tags: vec!["#baz".to_string()],
+            tags: HashSet::from(["baz".to_string()]),
         };
         vec![
             CardEntry {
@@ -326,7 +326,7 @@ mod tests {
             line: 0,
             prompt: "new".to_string(),
             response: "new".to_string(),
-            tags: vec!["#new".to_string()],
+            tags: HashSet::from(["new".to_string()]),
         };
         update_db(&file.path(), vec![card], true).unwrap();
         let read_db = get_db(&file.path()).unwrap();
@@ -342,7 +342,7 @@ mod tests {
             line: 0,
             prompt: "new".to_string(),
             response: "new".to_string(),
-            tags: vec!["#new".to_string()],
+            tags: HashSet::from(["new".to_string()]),
         };
         update_db(&file.path(), vec![card.clone()], false).unwrap();
         let read_db = get_db(&file.path()).unwrap();

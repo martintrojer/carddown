@@ -124,7 +124,7 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
 
 fn filter_cards(
     db: CardDb,
-    tags: HashSet<&str>,
+    tags: HashSet<String>,
     include_orphans: bool,
     leech_method: LeechMethod,
 ) -> Vec<CardEntry> {
@@ -138,7 +138,7 @@ fn filter_cards(
                 true
             }
         })
-        .filter(|c| tags.is_empty() || c.card.tags.iter().any(|t| tags.contains(t.as_str())))
+        .filter(|c| tags.is_empty() || c.card.tags.intersection(&tags).count() > 0)
         .filter(|c| include_orphans || !c.orphan)
         .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
         .collect()
@@ -188,7 +188,7 @@ fn main() -> Result<()> {
         } => {
             let db = db::get_db(&args.db)?;
             let state = db::get_global_state(&args.state)?;
-            let tags: HashSet<&str> = HashSet::from_iter(tags.iter().map(|s| s.as_str()));
+            let tags: HashSet<String> = HashSet::from_iter(tags.into_iter());
             let mut cards = filter_cards(db, tags, include_orphans, leech_method);
             cards.shuffle(&mut rand::thread_rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
@@ -241,7 +241,7 @@ mod tests {
             line: 0,
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
             response: "42".to_string(),
-            tags: vec!["#flashcard".to_string()],
+            tags: HashSet::from(["card".to_string()]),
         };
         let entry = CardEntry::new(card);
         db.insert(entry.card.id, entry);
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn test_filter_cards_matching_tags() {
         let db = get_card_db();
-        let tags = HashSet::from_iter(vec!["#flashcard"]);
+        let tags = HashSet::from_iter(vec!["card".to_string(), "test".to_string()]);
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
         let cards = filter_cards(db, tags, include_orphans, leech_method);
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn test_filter_cards_non_matching_tags() {
         let db = get_card_db();
-        let tags = HashSet::from_iter(vec!["#foo"]);
+        let tags = HashSet::from_iter(vec!["foo".to_string(), "test".to_string()]);
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
         let cards = filter_cards(db, tags, include_orphans, leech_method);

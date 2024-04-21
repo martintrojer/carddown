@@ -2,6 +2,7 @@ use anyhow::Context;
 use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -21,15 +22,19 @@ pub struct Card {
     pub line: u64,
     pub prompt: String,
     pub response: String,
-    pub tags: Vec<String>,
+    pub tags: HashSet<String>,
 }
 
-fn parse_tags(line: &str) -> Vec<String> {
-    TAG_RE
+fn parse_tags(line: &str) -> HashSet<String> {
+    let mut tags: HashSet<String> = TAG_RE
         .find_iter(line)
-        .map(|m| m.as_str().to_owned())
+        .map(|m| m.as_str())
         .filter(|s| !s.is_empty())
-        .collect()
+        .map(|s| s[1..s.len()].to_owned())
+        .filter(|s| !s.is_empty())
+        .collect();
+    tags.remove("flashcard");
+    tags
 }
 
 fn strip_tags(line: &str) -> Result<String> {
@@ -44,7 +49,7 @@ fn strip_tags(line: &str) -> Result<String> {
 #[derive(Debug, Default)]
 struct ParseState {
     card_lines: Vec<String>,
-    tags: Vec<String>,
+    tags: HashSet<String>,
     prompt: Option<String>,
     first_line: Option<u64>,
 }
@@ -148,7 +153,7 @@ mod tests {
             "What is the answer to life, the universe, and everything?"
         );
         assert_eq!(card.response, "42\nand stuff");
-        assert_eq!(card.tags, vec!["#flashcard"]);
+        assert!(card.tags.is_empty());
         let card = &cards[1];
         assert_eq!(card.line, 4);
         assert_eq!(card.prompt, "q1");
@@ -175,7 +180,10 @@ mod tests {
             "What is the answer to life, the universe, and everything?"
         );
         assert_eq!(card.response, "42");
-        assert_eq!(card.tags, vec!["#flashcard", "#foo", "#test"]);
+        assert_eq!(
+            card.tags,
+            HashSet::from(["foo".to_string(), "test".to_string()])
+        );
 
         let data = "q1:a1 🧠 ";
         fs::write(&file.path(), data).unwrap();
@@ -214,8 +222,11 @@ mod tests {
 
     #[test]
     fn test_parse_tags() {
-        let tags = parse_tags("#flashcard #spaced #test");
-        assert_eq!(tags, vec!["#flashcard", "#spaced", "#test"]);
+        let tags = parse_tags("#flashcard #spaced #test # ##");
+        assert_eq!(
+            tags,
+            HashSet::from(["spaced".to_string(), "test".to_string()])
+        );
     }
 
     #[test]
@@ -224,7 +235,7 @@ mod tests {
             id: blake3::hash(b"test"),
             file: PathBuf::from("test.rs"),
             line: 42,
-            tags: vec![],
+            tags: HashSet::new(),
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
             response: "42".to_string(),
         };
@@ -239,7 +250,7 @@ mod tests {
             id: blake3::hash(b"test"),
             file: PathBuf::from("test.rs"),
             line: 42,
-            tags: vec!["test".to_string()],
+            tags: HashSet::from(["test".to_string()]),
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
             response: "42".to_string(),
         };

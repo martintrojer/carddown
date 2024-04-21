@@ -14,7 +14,6 @@ pub enum Algo {
     SM2,
     SM5,
     Simple8,
-    Leitner,
 }
 
 // An integer from 0-5 indicating how easily the information was remembered today
@@ -73,8 +72,8 @@ pub trait Algorithm {
 pub fn new_algorithm(algo: Algo) -> Box<dyn Algorithm> {
     match algo {
         Algo::SM2 => Box::new(sm2::Sm2 {}),
+        Algo::SM5 => Box::new(sm5::Sm5 {}),
         Algo::Simple8 => Box::new(simple8::Simple8 {}),
-        _ => Box::new(sm5::Sm5 {}),
     }
 }
 
