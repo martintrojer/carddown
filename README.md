@@ -74,11 +74,11 @@ Options:
       --reverse-probability <REVERSE_PROBABILITY>
           Likelihood that prompt and response are swapped. 0 = never, 1 = always [default: 0]
       --cram
-          Cram session. Revise all cards regardless of interval if they haven't been revised in the last 12 hours. Does not effect state spaced repetition stats of the cards
+          Cram session. Revise all cards regardless of interval if they haven't been revised in the last 12 hours. Does not effect spaced repetition stats of the cards
 ```
 
 ### Scan
-You can scan your source files as many time as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-date aslong as the prompt/response or tags have changed.
+You can scan your source files as many time as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-date as long as the prompt/response or tags haven't changed.
 
 ```
 Arguments:
@@ -89,13 +89,12 @@ Options:
       --full                     Full scan (default incremental), can generate orphansUsage: carddown scan [OPTIONS]
 ```
 
-If `--full` flag is not set, CARDDOWN will do an incremental scan which will not generate orphan cards.
+If `--full` flag is not set (default), CARDDOWN will do an incremental scan which will not generate orphan cards.
 
 ### Audit
-In audit-mode you can review your orphan an leach cards. Orphan cards can be removed from the CARDDOWN database from the audit view, but leeches has to be fixed in the source files.
+In audit-mode you can review your orphan an leech cards. Orphan cards can be removed from the CARDDOWN database in the audit view, but leeches has to be fixed in the source files.
 
 ## Writing flashcards
-
 CARDDOWN supports single and multi-line flashcards. These flashcards can be anywhere in your markdown/text files.
 
 A single-line flashcards has this form:

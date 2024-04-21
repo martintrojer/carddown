@@ -87,7 +87,7 @@ enum Commands {
         reverse_probability: f64,
 
         /// Cram session. Revise all cards regardless of interval if they haven't been revised
-        /// in the last 12 hours. Does not effect state spaced repetition stats of the cards.
+        /// in the last 12 hours. Does not effect spaced repetition stats of the cards.
         #[arg(long)]
         cram: bool,
     },
