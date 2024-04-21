@@ -86,7 +86,7 @@ impl App {
         Ok(())
     }
 
-    fn update_card_state(&mut self, quality: Quality) {
+    fn update_state(&mut self, quality: Quality) {
         self.revealed = false;
         if self.cards.is_empty() {
             return;
@@ -123,22 +123,22 @@ impl App {
             KeyCode::Char(' ') if !self.help => self.revealed = true,
             KeyCode::Char('?') => self.help = !self.help,
             KeyCode::Char('0') | KeyCode::Char('a') if !self.help => {
-                self.update_card_state(Quality::IncorrectAndForgotten)
+                self.update_state(Quality::IncorrectAndForgotten)
             }
             KeyCode::Char('1') | KeyCode::Char('d') if !self.help => {
-                self.update_card_state(Quality::IncorrectButRemembered)
+                self.update_state(Quality::IncorrectButRemembered)
             }
             KeyCode::Char('2') | KeyCode::Char('g') if !self.help => {
-                self.update_card_state(Quality::IncorrectButEasyToRecall)
+                self.update_state(Quality::IncorrectButEasyToRecall)
             }
             KeyCode::Char('3') | KeyCode::Char('j') if !self.help => {
-                self.update_card_state(Quality::CorrectWithDifficulty)
+                self.update_state(Quality::CorrectWithDifficulty)
             }
             KeyCode::Char('4') | KeyCode::Char('l') if !self.help => {
-                self.update_card_state(Quality::CorrectWithHesitation)
+                self.update_state(Quality::CorrectWithHesitation)
             }
             KeyCode::Char('5') | KeyCode::Char('\'') if !self.help => {
-                self.update_card_state(Quality::Perfect)
+                self.update_state(Quality::Perfect)
             }
             _ => {}
         }

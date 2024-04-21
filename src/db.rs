@@ -42,6 +42,7 @@ pub type CardDb = HashMap<blake3::Hash, CardEntry>;
 #[derive(Debug, Serialize, Default, Deserialize, PartialEq)]
 pub struct GlobalState {
     pub optimal_factor_matrix: OptimalFactorMatrix,
+    pub last_revise_session: Option<DateTime<Utc>>,
     pub mean_q: Option<f64>,
     pub total_cards_reviewed: u64,
 }
@@ -50,7 +51,19 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if state_path.exists() {
         let data = fs::read_to_string(state_path)
             .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        ron::from_str(&data).context("Failed to deserialize global state")
+        let mut state: GlobalState =
+            ron::from_str(&data).context("Failed to deserialize global state")?;
+
+        // Reset mean_q if last revision session was more than a week ago
+        if let Some(last_session) = state.last_revise_session {
+            let now = chrono::Utc::now();
+            if last_session + chrono::Duration::weeks(1) > now {
+                state.total_cards_reviewed = 0;
+                state.mean_q = None;
+            }
+            state.last_revise_session = Some(now);
+        }
+        Ok(state)
     } else {
         log::info!("No global state found, using default");
         Ok(GlobalState::default())
