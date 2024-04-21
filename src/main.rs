@@ -85,6 +85,11 @@ enum Commands {
         /// include orphaned cards
         #[arg(long)]
         include_orphans: bool,
+
+        /// Likelihood that prompt and response are swapped
+        /// 0 = never, 1 = always
+        #[arg(long, default_value_t = 0.0)]
+        reverse_probability: f64,
     },
 }
 
@@ -178,13 +183,14 @@ fn main() -> Result<()> {
             res?
         }
         Commands::Revise {
-            maximum_cards_per_session,
-            maximum_duration_of_session,
+            algorithm,
+            include_orphans,
             leech_failure_threshold,
             leech_method,
-            algorithm,
+            maximum_cards_per_session,
+            maximum_duration_of_session,
+            reverse_probability,
             tags,
-            include_orphans,
         } => {
             let db = db::get_db(&args.db)?;
             let state = db::get_global_state(&args.state)?;
@@ -199,6 +205,7 @@ fn main() -> Result<()> {
                 state,
                 maximum_duration_of_session,
                 leech_failure_threshold,
+                reverse_probability,
                 Box::new(move |cards, state| {
                     let _ = db::update_cards(&args.db, cards);
                     db::write_global_state(&args.state, state)

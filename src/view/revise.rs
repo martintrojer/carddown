@@ -22,6 +22,7 @@ pub struct App {
     leech_threshold: usize,
     max_duration: usize,
     revealed: bool,
+    reverse_probability: f64,
     started: Instant,
     #[allow(clippy::type_complexity)]
     update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
@@ -35,6 +36,7 @@ impl App {
         global_state: GlobalState,
         max_duration: usize,
         leech_threshold: usize,
+        reverse_probability: f64,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
         Self {
@@ -48,6 +50,7 @@ impl App {
             leech_threshold,
             max_duration,
             revealed: false,
+            reverse_probability,
             started: Instant::now(),
         }
     }
@@ -251,7 +254,8 @@ impl App {
             )
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
-
+        let reversed =
+            self.reverse_probability > 0.0 && rand::random::<f64>() < self.reverse_probability;
         let counter_text = if self.cards.is_empty() || self.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
@@ -266,10 +270,14 @@ impl App {
             });
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Prompt".bold()]));
-            lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+            if reversed && !self.revealed {
+                lines.push(Line::from(vec!["<hidden>".into()]));
+            } else {
+                lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+            }
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Response".bold()]));
-            if self.revealed {
+            if reversed || self.revealed {
                 for l in card.card.response.lines() {
                     lines.push(Line::from(vec![l.into()]));
                 }

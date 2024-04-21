@@ -1,11 +1,11 @@
   - [ ] cram mode
-  - [ ] tags not part of card hash
+  - [n] tags not part of card hash
   - [x] store tags without hash-char
   - [x] check entire file is valid utf8 when parsing file
   - [x] @carddown-ignore anywhere in file skips it
   - [ ] reversed revise mode / always / sometimes
-  - [ ] LeachMode::Normal
-  - [ ] Algo in revise footer
+  - [n] LeachMode::Normal
+  - [x] Algo in revise footer
   - [x] Date added in card data
   - [x] Revise-count in card data
-      - show this extra info in audit view
+      - [x] show this extra info in audit view
