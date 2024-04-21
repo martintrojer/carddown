@@ -21,7 +21,8 @@ We end the card with a horizontal line which can defined with :
 Let's try:
 Radii of stable orbits in the Bohr model #flashcard #physics
 
-$$a_0  = \frac{{ \hbar ^2}}{{m_e ke^2}}$$
-(you can also inline) $\Delta E = h\nu$ and $c = \lambda \nu$
+a0  = h2 / (m_e k e^2)
+
+The electron is able to revolve in certain stable orbits around the nucleus without radiating any energy, contrary to what classical electromagnetism suggests
 
 - - -
