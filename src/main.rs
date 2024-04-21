@@ -39,13 +39,13 @@ enum LeechMethod {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Scan file of folder for cards
+    /// Scan file or folder for cards
     Scan {
-        /// Use a single file as input
+        /// Scan a single file for flashcards
         #[arg(long)]
         file: Option<PathBuf>,
 
-        /// Walk a directory and use all files as input
+        /// Walk a directory and parse all matching files
         #[arg(long, conflicts_with("file"))]
         folder: Option<PathBuf>,
 
@@ -53,13 +53,13 @@ enum Commands {
         #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
         file_types: Vec<String>,
 
-        /// Full scan (different from default incremental), will generate orphans if found
+        /// Full scan (default incremental), can generate orphans
         #[arg(long)]
         full: bool,
     },
     /// Audit the card database for orphaned and leech cards
     Audit {},
-    /// Run a revise session
+    /// Revise pending flahscards
     Revise {
         #[arg(long, default_value_t = 30)]
         maximum_cards_per_session: usize,
@@ -78,7 +78,7 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = Algo::SM5)]
         algorithm: Algo,
 
-        /// Tags to filter cards
+        /// Tags to filter cards, no tags matches all cards
         #[arg(long)]
         tags: Vec<String>,
 
@@ -86,7 +86,7 @@ enum Commands {
         #[arg(long)]
         include_orphans: bool,
 
-        /// Likelihood that prompt and response are swapped
+        /// Likelihood that prompt and response are swapped.
         /// 0 = never, 1 = always
         #[arg(long, default_value_t = 0.0)]
         reverse_probability: f64,
@@ -98,6 +98,7 @@ enum Commands {
     },
 }
 
+/// CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text files.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
