@@ -97,6 +97,7 @@ impl App {
 
     fn update_state(&mut self, quality: Quality) {
         self.ui.revealed = false;
+        let current_card = self.ui.current_card;
         if self.cards.is_empty() {
             return;
         }
@@ -106,7 +107,7 @@ impl App {
             self.ui.current_card += 1;
         }
         update_meanq(&mut self.global_state, quality);
-        if let Some(card) = self.cards.get_mut(self.ui.current_card) {
+        if let Some(card) = self.cards.get_mut(current_card) {
             card.last_revised = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm

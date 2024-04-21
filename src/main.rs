@@ -199,7 +199,8 @@ fn main() -> Result<()> {
             tag: tags,
         } => {
             let db = db::get_db(&args.db)?;
-            let state = db::get_global_state(&args.state)?;
+            let mut state = db::get_global_state(&args.state)?;
+            db::refresh_global_state(&mut state);
             let tags_set: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
             let mut cards = filter_cards(db, tags_set, include_orphans, leech_method, cram);
             cards.shuffle(&mut rand::thread_rng());

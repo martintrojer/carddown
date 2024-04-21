@@ -51,23 +51,24 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if state_path.exists() {
         let data = fs::read_to_string(state_path)
             .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        let mut state: GlobalState =
-            ron::from_str(&data).context("Failed to deserialize global state")?;
-
-        // Reset mean_q if last revision session was more than a week ago
-        if let Some(last_session) = state.last_revise_session {
-            let now = chrono::Utc::now();
-            if last_session + chrono::Duration::weeks(1) > now {
-                state.total_cards_revised = 0;
-                state.mean_q = None;
-            }
-            state.last_revise_session = Some(now);
-        }
-        Ok(state)
+        ron::from_str(&data).context("Failed to deserialize global state")
     } else {
         log::info!("No global state found, using default");
         Ok(GlobalState::default())
     }
+}
+
+pub fn refresh_global_state(state: &mut GlobalState) {
+    let now = chrono::Utc::now();
+    // Reset mean_q if last revision session was more than a week ago
+    if let Some(last_session) = state.last_revise_session {
+        if now - last_session > chrono::Duration::weeks(1) {
+            log::info!("Resetting mean_q and total_cards_revised");
+            state.total_cards_revised = 0;
+            state.mean_q = None;
+        }
+    }
+    state.last_revise_session = Some(now);
 }
 
 pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
@@ -282,6 +283,24 @@ mod tests {
         let file = write_a_global_state(&state);
         let read_state = get_global_state(&file.path()).unwrap();
         assert_eq!(state, read_state);
+    }
+
+    #[test]
+    fn test_refresh_global_state() {
+        let mut state = GlobalState::default();
+        assert!(state.last_revise_session.is_none());
+        refresh_global_state(&mut state);
+        assert!(state.last_revise_session.is_some());
+        assert_eq!(state.total_cards_revised, 0);
+        assert!(state.mean_q.is_none());
+
+        state.last_revise_session = Some(Utc::now() - chrono::Duration::weeks(2));
+        state.mean_q = Some(2.4);
+        state.total_cards_revised = 4;
+        refresh_global_state(&mut state);
+        assert!(state.last_revise_session.is_some());
+        assert_eq!(state.total_cards_revised, 0);
+        assert!(state.mean_q.is_none());
     }
 
     #[test]

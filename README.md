@@ -6,7 +6,7 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
 
 ## Features
 
-  - Scans your notes-files for flashcards with facts that you want to remember.
+  - Scans your notes for flashcards with facts that you want to remember.
   - Keeps tracks of flashcards by hash of its contents, thus supports files being edited and cards moved around.
   - Extracted cards and meta-data are stored in a separate folder, the original files are never not modified.
   - Supports tags, enabling specific study sessions.
