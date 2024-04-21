@@ -2,6 +2,14 @@
 name = "carddown"
 version = "0.1.0"
 edition = "2021"
+authors = ["Martin Trojer <martin.trojer@gmail.com>"]
+license = "MIT"
+description = "A simple cli tool to keep track of (and study) flashcards in text files"
+readme = "README.md"
+homepage = "https://github.com/martintrojer/carddown"
+repository = "https://github.com/martintrojer/carddown"
+keywords = ["flashcards", "cli", "study", "learning", "cards", "quiz", "memorize", "memorization", "spaced-repetition"]
+categories = ["education", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
