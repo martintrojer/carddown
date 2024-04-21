@@ -16,7 +16,6 @@ use serde::{Deserialize, Serialize};
 pub struct CardEntry {
     pub added: DateTime<Utc>,
     pub card: Card,
-    pub failed_count: u64,
     pub last_reviewed: Option<DateTime<Utc>>,
     pub leech: bool,
     pub orphan: bool,
@@ -29,7 +28,6 @@ impl CardEntry {
         Self {
             added: Utc::now(),
             card,
-            failed_count: 0,
             last_reviewed: None,
             leech: false,
             orphan: false,
@@ -44,6 +42,8 @@ pub type CardDb = HashMap<blake3::Hash, CardEntry>;
 #[derive(Debug, Serialize, Default, Deserialize, PartialEq)]
 pub struct GlobalState {
     pub optimal_factor_matrix: OptimalFactorMatrix,
+    pub mean_q: Option<f64>,
+    pub total_cards_reviewed: u64,
 }
 
 pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
@@ -230,7 +230,6 @@ mod tests {
             CardEntry {
                 added: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap(),
                 card,
-                failed_count: 0,
                 last_reviewed: None,
                 leech: false,
                 orphan: true,
@@ -240,7 +239,6 @@ mod tests {
             CardEntry {
                 added: "2011-11-11T11:11:11Z".parse::<DateTime<Utc>>().unwrap(),
                 card: card2,
-                failed_count: 1,
                 last_reviewed: "2012-12-12T12:12:12Z".parse::<DateTime<Utc>>().ok(),
                 leech: true,
                 orphan: false,

@@ -1,5 +1,6 @@
-pub mod sm2;
-pub mod sm5;
+mod simple8;
+mod sm2;
+mod sm5;
 
 use clap::ValueEnum;
 use ordered_float::OrderedFloat;
@@ -49,6 +50,8 @@ pub struct CardState {
     pub interval: u64,
     // The number of times the information has been reviewed prior to this review
     repetitions: u64,
+    // The number of times the information has been reviewed and failed
+    pub failed_count: u64,
 }
 
 impl Default for CardState {
@@ -57,6 +60,7 @@ impl Default for CardState {
             ease_factor: 2.5,
             interval: 0,
             repetitions: 0,
+            failed_count: 0,
         }
     }
 }
@@ -69,13 +73,9 @@ pub trait Algorithm {
 pub fn new_algorithm(algo: Algo) -> Box<dyn Algorithm> {
     match algo {
         Algo::SM2 => Box::new(sm2::Sm2 {}),
+        Algo::Simple8 => Box::new(simple8::Simple8 {}),
         _ => Box::new(sm5::Sm5 {}),
     }
-}
-
-fn round_float(f: f64, fix: usize) -> f64 {
-    let factor = 10.0_f64.powi(fix as i32);
-    (f * factor).round() / factor
 }
 
 fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {
@@ -84,5 +84,60 @@ fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {
     } else {
         let q = *quality as usize;
         ease_factor + 0.1 - (5 - q) as f64 * (0.08 + (5 - q) as f64 * 0.02)
+    }
+}
+
+pub fn update_meanq(global: &mut GlobalState, quality: Quality) {
+    let q = (quality as usize) as f64;
+    let total = global.total_cards_reviewed as f64;
+    global.total_cards_reviewed += 1;
+    global.mean_q = Some(if let Some(mean_q) = global.mean_q {
+        (total * mean_q + q) / (total + 1.0)
+    } else {
+        (quality as usize) as f64
+    });
+}
+
+fn round_float(f: f64, fix: usize) -> f64 {
+    let factor = 10.0_f64.powi(fix as i32);
+    (f * factor).round() / factor
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_round_float() {
+        assert_eq!(round_float(2.123456, 2), 2.12);
+        assert_eq!(round_float(2.123456, 3), 2.123);
+        assert_eq!(round_float(2.123456, 4), 2.1235);
+    }
+
+    #[test]
+    fn test_update_meanq() {
+        let mut global = GlobalState::default();
+        update_meanq(&mut global, Quality::Perfect);
+        assert_eq!(global.total_cards_reviewed, 1);
+        assert_eq!(global.mean_q.unwrap(), 5.0);
+
+        update_meanq(&mut global, Quality::CorrectWithHesitation);
+        assert_eq!(global.total_cards_reviewed, 2);
+        assert_eq!(global.mean_q.unwrap(), 4.5);
+
+        update_meanq(&mut global, Quality::IncorrectAndForgotten);
+        assert_eq!(global.total_cards_reviewed, 3);
+        assert_eq!(global.mean_q.unwrap(), 3.0);
+    }
+
+    #[test]
+    fn test_new_ease_factor() {
+        let q = Quality::Perfect;
+        let ef = 2.5;
+        assert_eq!(new_ease_factor(&q, ef), 2.6);
+
+        let q = Quality::IncorrectAndForgotten;
+        let ef = 2.5;
+        assert_eq!(round_float(new_ease_factor(&q, ef), 2), 1.70);
     }
 }

@@ -1,4 +1,4 @@
-use crate::algorithm::{Algorithm, Quality};
+use crate::algorithm::{update_meanq, Algorithm, Quality};
 use anyhow::Result;
 use chrono::{DateTime, Local};
 use ratatui::prelude::*;
@@ -23,10 +23,12 @@ pub struct App {
     max_duration: usize,
     revealed: bool,
     started: Instant,
+    #[allow(clippy::type_complexity)]
     update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
 }
 
 impl App {
+    #[allow(clippy::type_complexity)]
     pub fn new(
         cards: Vec<CardEntry>,
         algorithm: Box<dyn Algorithm>,
@@ -91,15 +93,16 @@ impl App {
         } else {
             self.current_card += 1;
         }
+        update_meanq(&mut self.global_state, quality);
         if let Some(card) = self.cards.get_mut(self.current_card) {
             card.last_reviewed = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm
                 .update_state(&quality, &mut card.state, &mut self.global_state);
             if quality.failed() {
-                card.failed_count += 1;
+                card.state.failed_count += 1;
             }
-            if card.failed_count >= self.leech_threshold as u64 {
+            if card.state.failed_count >= self.leech_threshold as u64 {
                 card.leech = true;
             }
         }

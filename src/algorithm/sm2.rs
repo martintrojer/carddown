@@ -6,7 +6,10 @@ pub struct Sm2 {}
 
 impl Algorithm for Sm2 {
     fn update_state(&self, quality: &Quality, state: &mut CardState, _global: &mut GlobalState) {
-        if !quality.failed() {
+        if quality.failed() {
+            state.repetitions = 0;
+            state.interval = 0;
+        } else {
             match state.repetitions {
                 0 => {
                     state.interval = 1;
@@ -18,12 +21,8 @@ impl Algorithm for Sm2 {
                     state.interval = (state.interval as f64 * state.ease_factor).round() as u64;
                 }
             }
-
             state.repetitions += 1;
             state.ease_factor = new_ease_factor(quality, state.ease_factor);
-        } else {
-            state.repetitions = 0;
-            state.interval = 0;
         }
     }
     fn name(&self) -> &'static str {
@@ -35,7 +34,7 @@ impl Algorithm for Sm2 {
 mod tests {
 
     use super::*;
-    use crate::db::GlobalState;
+    use crate::{algorithm::round_float, db::GlobalState};
 
     #[test]
     fn test_sm2() {
@@ -56,7 +55,7 @@ mod tests {
         sm2.update_state(&Quality::Perfect, &mut state, &mut global);
         assert_eq!(state.interval, 16);
         assert_eq!(state.repetitions, 3);
-        assert!(state.ease_factor > 2.8 && state.ease_factor < 2.801);
+        assert_eq!(round_float(state.ease_factor, 2), 2.80);
         let prev_ef = state.ease_factor;
 
         sm2.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
