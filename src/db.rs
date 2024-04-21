@@ -44,7 +44,7 @@ pub struct GlobalState {
     pub optimal_factor_matrix: OptimalFactorMatrix,
     pub last_revise_session: Option<DateTime<Utc>>,
     pub mean_q: Option<f64>,
-    pub total_cards_reviewed: u64,
+    pub total_cards_revised: u64,
 }
 
 pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
@@ -58,7 +58,7 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
         if let Some(last_session) = state.last_revise_session {
             let now = chrono::Utc::now();
             if last_session + chrono::Duration::weeks(1) > now {
-                state.total_cards_reviewed = 0;
+                state.total_cards_revised = 0;
                 state.mean_q = None;
             }
             state.last_revise_session = Some(now);

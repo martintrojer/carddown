@@ -88,8 +88,8 @@ fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {
 
 pub fn update_meanq(global: &mut GlobalState, quality: Quality) {
     let q = (quality as usize) as f64;
-    let total = global.total_cards_reviewed as f64;
-    global.total_cards_reviewed += 1;
+    let total = global.total_cards_revised as f64;
+    global.total_cards_revised += 1;
     global.mean_q = Some(if let Some(mean_q) = global.mean_q {
         (total * mean_q + q) / (total + 1.0)
     } else {
@@ -117,15 +117,15 @@ mod tests {
     fn test_update_meanq() {
         let mut global = GlobalState::default();
         update_meanq(&mut global, Quality::Perfect);
-        assert_eq!(global.total_cards_reviewed, 1);
+        assert_eq!(global.total_cards_revised, 1);
         assert_eq!(global.mean_q.unwrap(), 5.0);
 
         update_meanq(&mut global, Quality::CorrectWithHesitation);
-        assert_eq!(global.total_cards_reviewed, 2);
+        assert_eq!(global.total_cards_revised, 2);
         assert_eq!(global.mean_q.unwrap(), 4.5);
 
         update_meanq(&mut global, Quality::IncorrectAndForgotten);
-        assert_eq!(global.total_cards_reviewed, 3);
+        assert_eq!(global.total_cards_revised, 3);
         assert_eq!(global.mean_q.unwrap(), 3.0);
     }
 

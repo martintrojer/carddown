@@ -30,7 +30,7 @@ CARDDOWN has 3 commands:
 Audit and Revise mode use a terminal UI, with help prompts to describe key bindings.
 
 ### Revise
-When you launch a revise session, you will be presented with all flashcards that a due to be reviewed.
+When you launch a revise session, you will be presented with all flashcards that a due to be revised.
 
 The main flow for each card is as follows:
 
@@ -74,7 +74,7 @@ Options:
       --reverse-probability <REVERSE_PROBABILITY>
           Likelihood that prompt and response are swapped. 0 = never, 1 = always [default: 0]
       --cram
-          Cram session. Review all cards regardless of interval if they haven't been reviewed in the last 12 hours. Does not effect state spaced repetition stats of the cards
+          Cram session. Revise all cards regardless of interval if they haven't been revised in the last 12 hours. Does not effect state spaced repetition stats of the cards
 ```
 
 ### Scan
