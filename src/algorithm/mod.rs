@@ -2,7 +2,7 @@ pub mod sm2;
 pub mod sm5;
 
 use clap::ValueEnum;
-use fixed::types::I57F7;
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,10 +38,8 @@ impl Quality {
     }
 }
 
-pub type EaseFactor = I57F7;
-
 // repetitions -> ease_factor -> optimal_factor
-pub type OptimalFactorMatrix = HashMap<u64, HashMap<EaseFactor, f64>>;
+pub type OptimalFactorMatrix = HashMap<u64, HashMap<OrderedFloat<f64>, f64>>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
@@ -65,6 +63,19 @@ impl Default for CardState {
 
 pub trait Algorithm {
     fn update_state(&self, quality: &Quality, state: &mut CardState, global: &mut GlobalState);
+    fn name(&self) -> &'static str;
+}
+
+pub fn new_algorithm(algo: Algo) -> Box<dyn Algorithm> {
+    match algo {
+        Algo::SM2 => Box::new(sm2::Sm2 {}),
+        _ => Box::new(sm5::Sm5 {}),
+    }
+}
+
+fn round_float(f: f64, fix: usize) -> f64 {
+    let factor = 10.0_f64.powi(fix as i32);
+    (f * factor).round() / factor
 }
 
 fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {

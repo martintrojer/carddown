@@ -243,8 +243,8 @@ mod tests {
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
             response: "42".to_string(),
         };
-        let json = serde_json::to_string(&card)?;
-        let card2: Card = serde_json::from_str(&json)?;
+        let ron = ron::to_string(&card)?;
+        let card2: Card = ron::from_str(&ron)?;
         assert_eq!(card, card2);
         Ok(())
     }

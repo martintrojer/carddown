@@ -50,7 +50,7 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if state_path.exists() {
         let data = fs::read_to_string(state_path)
             .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        serde_json::from_str(&data).context("Failed to deserialize state.json")
+        ron::from_str(&data).context("Failed to deserialize global state")
     } else {
         log::info!("No global state found, using default");
         Ok(GlobalState::default())
@@ -60,7 +60,8 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
 pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
     fs::write(
         state_path,
-        serde_json::to_string(state).context("Failed to serialize state.json")?,
+        ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default())
+            .context("Failed to serialize global state")?,
     )
     .with_context(|| format!("Error writing to `{}`", state_path.display()))
 }
@@ -70,9 +71,10 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         log::info!("No db found, creating new one");
         return Ok(HashMap::new());
     }
-    let data: Vec<CardEntry> = serde_json::from_str(
+    let data: Vec<CardEntry> = ron::from_str(
         &fs::read_to_string(db_path)
-            .with_context(|| format!("Error reading `{}`", db_path.display()))?,
+            .with_context(|| format!("Error reading `{}`", db_path.display()))
+            .context("Failed to deserialise db")?,
     )
     .context("Error deserializing db")?;
     Ok(data
@@ -85,7 +87,8 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     let data = db.values().collect::<Vec<_>>();
     fs::write(
         db_path,
-        serde_json::to_string(&data).context("Error serializing db")?,
+        ron::ser::to_string_pretty(&data, ron::ser::PrettyConfig::default())
+            .context("Error serializing db")?,
     )
     .with_context(|| format!("Error writing to `{}`", db_path.display()))
 }
@@ -185,6 +188,7 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
 #[cfg(test)]
 mod tests {
 
+    use ordered_float::OrderedFloat;
     use tempfile::NamedTempFile;
 
     use super::*;
@@ -255,7 +259,15 @@ mod tests {
 
     #[test]
     fn test_get_global_state() {
-        let state = GlobalState::default();
+        let mut state = GlobalState::default();
+        let file = write_a_global_state(&state);
+        let read_state = get_global_state(&file.path()).unwrap();
+        assert_eq!(state, read_state);
+
+        state.optimal_factor_matrix = OptimalFactorMatrix::new();
+        state
+            .optimal_factor_matrix
+            .insert(1, HashMap::from([(OrderedFloat(2.4), 4.6)]));
         let file = write_a_global_state(&state);
         let read_state = get_global_state(&file.path()).unwrap();
         assert_eq!(state, read_state);

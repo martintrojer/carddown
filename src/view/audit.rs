@@ -194,10 +194,10 @@ impl App {
                     .into()]),
                 Line::from(vec![]),
                 Line::from(vec!["Added".bold()]),
-                Line::from(vec![(|| {
+                Line::from(vec![{
                     let l: DateTime<Local> = DateTime::from(card.added);
                     l.format("%Y-%m-%d %H:%M").to_string().into()
-                })()]),
+                }]),
                 Line::from(vec![]),
                 Line::from(vec!["File".bold()]),
                 Line::from(vec![

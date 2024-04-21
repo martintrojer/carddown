@@ -1,4 +1,6 @@
-use super::{new_ease_factor, Algorithm, CardState, EaseFactor, OptimalFactorMatrix, Quality};
+use ordered_float::OrderedFloat;
+
+use super::{new_ease_factor, round_float, Algorithm, CardState, OptimalFactorMatrix, Quality};
 use crate::db::GlobalState;
 
 pub struct Sm5 {}
@@ -32,6 +34,9 @@ impl Algorithm for Sm5 {
             state.ease_factor = new_ef;
         }
     }
+    fn name(&self) -> &'static str {
+        "SM5"
+    }
 }
 
 fn new_optimal_factor(optimal_factor: f64, quality: &Quality) -> f64 {
@@ -50,17 +55,17 @@ fn update_optimal_factor_matrix(
     of_matrix: &mut OptimalFactorMatrix,
 ) {
     let mut factors = of_matrix.remove(&repetitions).unwrap_or_default();
-    factors.insert(EaseFactor::from_num(ease_factor), optimal_factor);
+    factors.insert(OrderedFloat(round_float(ease_factor, 2)), optimal_factor);
     of_matrix.insert(repetitions, factors);
 }
 
 fn get_optimal_factor(repetitions: u64, ease_factor: f64, of_matrix: &OptimalFactorMatrix) -> f64 {
     of_matrix
         .get(&repetitions)
-        .and_then(|factors| factors.get(&EaseFactor::from_num(ease_factor)))
+        .and_then(|factors| factors.get(&OrderedFloat(round_float(ease_factor, 2))))
         .copied()
         // Initial value for optimal factor is 4.0
-        .unwrap_or_else(|| if repetitions == 0 { 4.0 } else { ease_factor })
+        .unwrap_or(if repetitions == 0 { 4.0 } else { ease_factor })
 }
 
 fn repetition_interval(

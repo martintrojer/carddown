@@ -1,5 +1,4 @@
-use crate::algorithm::sm2::Sm2;
-use crate::algorithm::{Algo, Algorithm, Quality};
+use crate::algorithm::{Algorithm, Quality};
 use anyhow::Result;
 use chrono::{DateTime, Local};
 use ratatui::prelude::*;
@@ -14,7 +13,7 @@ use ratatui::{
 };
 
 pub struct App {
-    algorithm: Algo,
+    algorithm: Box<dyn Algorithm>,
     cards: Vec<CardEntry>,
     current_card: usize,
     exit: bool,
@@ -30,7 +29,7 @@ pub struct App {
 impl App {
     pub fn new(
         cards: Vec<CardEntry>,
-        algorithm: Algo,
+        algorithm: Box<dyn Algorithm>,
         global_state: GlobalState,
         max_duration: usize,
         leech_threshold: usize,
@@ -95,10 +94,8 @@ impl App {
         if let Some(card) = self.cards.get_mut(self.current_card) {
             card.last_reviewed = Some(chrono::Utc::now());
             card.revise_count += 1;
-            let algorithm = match self.algorithm {
-                _ => Sm2 {},
-            };
-            algorithm.update_state(&quality, &mut card.state, &mut self.global_state);
+            self.algorithm
+                .update_state(&quality, &mut card.state, &mut self.global_state);
             if quality.failed() {
                 card.failed_count += 1;
             }
@@ -240,6 +237,7 @@ impl App {
             "<?> ".bold(),
             "Elapsed ".into(),
             format!("{}:{:02} ", min, secs).bold(),
+            format!(" [{}] ", self.algorithm.name()).bold(),
         ]));
         let block = Block::default()
             .title(title.alignment(Alignment::Center))

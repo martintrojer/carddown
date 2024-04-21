@@ -26,6 +26,9 @@ impl Algorithm for Sm2 {
             state.interval = 0;
         }
     }
+    fn name(&self) -> &'static str {
+        "SM2"
+    }
 }
 
 #[cfg(test)]

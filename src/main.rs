@@ -7,6 +7,7 @@ use crate::algorithm::Algo;
 use crate::card::Card;
 use crate::db::CardDb;
 use crate::db::CardEntry;
+use algorithm::new_algorithm;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
@@ -26,8 +27,8 @@ lazy_static! {
             format!("{}/.local/state", home)
         })
     );
-    static ref DB_FILE_PATH: String = format!("{}/cards.json", *DB_PATH);
-    static ref STATE_FILE_PATH: String = format!("{}/state.json", *DB_PATH);
+    static ref DB_FILE_PATH: String = format!("{}/cards.ron", *DB_PATH);
+    static ref STATE_FILE_PATH: String = format!("{}/state.ron", *DB_PATH);
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -74,7 +75,7 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = LeechMethod::Skip)]
         leech_method: LeechMethod,
 
-        #[arg(long, value_enum, default_value_t = Algo::SM2)]
+        #[arg(long, value_enum, default_value_t = Algo::SM5)]
         algorithm: Algo,
 
         /// Tags to filter cards
@@ -194,7 +195,7 @@ fn main() -> Result<()> {
             let mut terminal = view::init()?;
             let res = view::revise::App::new(
                 cards,
-                algorithm,
+                new_algorithm(algorithm),
                 state,
                 maximum_duration_of_session,
                 leech_failure_threshold,
