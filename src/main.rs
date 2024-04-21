@@ -90,6 +90,11 @@ enum Commands {
         /// 0 = never, 1 = always
         #[arg(long, default_value_t = 0.0)]
         reverse_probability: f64,
+
+        /// Cram session. Review all cards regardless of interval if they haven't been reviewed
+        /// in the last 12 hours. Does not effect state spaced repetition stats of the cards.
+        #[arg(long)]
+        cram: bool,
     },
 }
 
@@ -132,13 +137,18 @@ fn filter_cards(
     tags: HashSet<String>,
     include_orphans: bool,
     leech_method: LeechMethod,
+    cram_mode: bool,
 ) -> Vec<CardEntry> {
     let today = chrono::Utc::now();
     db.into_values()
         .filter(|c| {
             if let Some(last_reviewed) = c.last_reviewed {
-                let next_date = last_reviewed + chrono::Duration::days(c.state.interval as i64);
-                today >= next_date
+                if cram_mode {
+                    today - last_reviewed > chrono::Duration::hours(12)
+                } else {
+                    let next_date = last_reviewed + chrono::Duration::days(c.state.interval as i64);
+                    today >= next_date
+                }
             } else {
                 true
             }
@@ -184,6 +194,7 @@ fn main() -> Result<()> {
         }
         Commands::Revise {
             algorithm,
+            cram,
             include_orphans,
             leech_failure_threshold,
             leech_method,
@@ -195,20 +206,24 @@ fn main() -> Result<()> {
             let db = db::get_db(&args.db)?;
             let state = db::get_global_state(&args.state)?;
             let tags: HashSet<String> = HashSet::from_iter(tags.into_iter());
-            let mut cards = filter_cards(db, tags, include_orphans, leech_method);
+            let mut cards = filter_cards(db, tags, include_orphans, leech_method, cram);
             cards.shuffle(&mut rand::thread_rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             let mut terminal = view::init()?;
             let res = view::revise::App::new(
-                cards,
                 new_algorithm(algorithm),
+                cards,
                 state,
-                maximum_duration_of_session,
                 leech_failure_threshold,
+                maximum_duration_of_session,
                 reverse_probability,
                 Box::new(move |cards, state| {
-                    let _ = db::update_cards(&args.db, cards);
-                    db::write_global_state(&args.state, state)
+                    // Dont update the database if we are in cram mode
+                    if !cram {
+                        let _ = db::update_cards(&args.db, cards);
+                        db::write_global_state(&args.state, state)?;
+                    }
+                    Ok(())
                 }),
             )
             .run(&mut terminal);
@@ -260,8 +275,9 @@ mod tests {
         let db = CardDb::new();
         let tags = HashSet::new();
         let include_orphans = false;
+        let cram_mode = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert_eq!(cards.len(), 0);
     }
 
@@ -273,7 +289,8 @@ mod tests {
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert_eq!(cards.len(), 1);
     }
 
@@ -285,7 +302,8 @@ mod tests {
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert_eq!(cards.len(), 1);
     }
 
@@ -298,8 +316,37 @@ mod tests {
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert!(cards.is_empty());
+    }
+
+    #[test]
+    fn test_filter_cards_lapsed_interval() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.state.interval = 1;
+        entry.last_reviewed = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let tags = HashSet::new();
+        let include_orphans = false;
+        let leech_method = LeechMethod::Skip;
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
+        assert_eq!(cards.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_cards_cram_mode() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.last_reviewed = Some(chrono::Utc::now() - chrono::Duration::hours(13));
+        entry.state.interval = 2;
+        let tags = HashSet::new();
+        let include_orphans = false;
+        let leech_method = LeechMethod::Skip;
+        let cram_mode = true;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
+        assert_eq!(cards.len(), 1);
     }
 
     #[test]
@@ -308,7 +355,8 @@ mod tests {
         let tags = HashSet::from_iter(vec!["card".to_string(), "test".to_string()]);
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert_eq!(cards.len(), 1);
     }
 
@@ -318,7 +366,8 @@ mod tests {
         let tags = HashSet::from_iter(vec!["foo".to_string(), "test".to_string()]);
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert!(cards.is_empty());
     }
 
@@ -330,7 +379,8 @@ mod tests {
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert!(cards.is_empty());
     }
 
@@ -342,7 +392,8 @@ mod tests {
         let tags = HashSet::new();
         let include_orphans = false;
         let leech_method = LeechMethod::Skip;
-        let cards = filter_cards(db, tags, include_orphans, leech_method);
+        let cram_mode = false;
+        let cards = filter_cards(db, tags, include_orphans, leech_method, cram_mode);
         assert!(cards.is_empty());
     }
 }

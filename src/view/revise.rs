@@ -12,30 +12,34 @@ use ratatui::{
     widgets::{block::*, *},
 };
 
+struct UiState {
+    current_card: usize,
+    exit: bool,
+    help: bool,
+    revealed: bool,
+    started: Instant,
+}
+
 pub struct App {
     algorithm: Box<dyn Algorithm>,
     cards: Vec<CardEntry>,
-    current_card: usize,
-    exit: bool,
     global_state: GlobalState,
-    help: bool,
     leech_threshold: usize,
     max_duration: usize,
-    revealed: bool,
     reverse_probability: f64,
-    started: Instant,
     #[allow(clippy::type_complexity)]
     update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
+    ui: UiState,
 }
 
 impl App {
     #[allow(clippy::type_complexity)]
     pub fn new(
-        cards: Vec<CardEntry>,
         algorithm: Box<dyn Algorithm>,
+        cards: Vec<CardEntry>,
         global_state: GlobalState,
-        max_duration: usize,
         leech_threshold: usize,
+        max_duration: usize,
         reverse_probability: f64,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
@@ -43,21 +47,23 @@ impl App {
             algorithm,
             cards,
             update_fn,
-            current_card: 0,
-            exit: false,
             global_state,
-            help: false,
             leech_threshold,
             max_duration,
-            revealed: false,
             reverse_probability,
-            started: Instant::now(),
+            ui: UiState {
+                current_card: 0,
+                exit: false,
+                help: false,
+                revealed: false,
+                started: Instant::now(),
+            },
         }
     }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut super::Tui) -> io::Result<()> {
-        while !self.exit {
+        while !self.ui.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events()?;
         }
@@ -71,7 +77,7 @@ impl App {
     /// updates the application's state based on user input
     fn handle_events(&mut self) -> io::Result<()> {
         if let Ok(true) = event::poll(Duration::from_secs(1)) {
-            if self.started.elapsed().as_secs() >= self.max_duration as u64 {
+            if self.ui.started.elapsed().as_secs() >= self.max_duration as u64 {
                 self.exit();
             }
             match event::read()? {
@@ -87,17 +93,17 @@ impl App {
     }
 
     fn update_state(&mut self, quality: Quality) {
-        self.revealed = false;
+        self.ui.revealed = false;
         if self.cards.is_empty() {
             return;
         }
-        if self.current_card >= self.cards.len() {
+        if self.ui.current_card >= self.cards.len() {
             self.exit();
         } else {
-            self.current_card += 1;
+            self.ui.current_card += 1;
         }
         update_meanq(&mut self.global_state, quality);
-        if let Some(card) = self.cards.get_mut(self.current_card) {
+        if let Some(card) = self.cards.get_mut(self.ui.current_card) {
             card.last_reviewed = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm
@@ -114,30 +120,30 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
-                if self.help {
-                    self.help = false;
+                if self.ui.help {
+                    self.ui.help = false;
                 } else {
                     self.exit();
                 }
             }
-            KeyCode::Char(' ') if !self.help => self.revealed = true,
-            KeyCode::Char('?') => self.help = !self.help,
-            KeyCode::Char('0') | KeyCode::Char('a') if !self.help => {
+            KeyCode::Char(' ') if !self.ui.help => self.ui.revealed = true,
+            KeyCode::Char('?') => self.ui.help = !self.ui.help,
+            KeyCode::Char('0') | KeyCode::Char('a') if !self.ui.help => {
                 self.update_state(Quality::IncorrectAndForgotten)
             }
-            KeyCode::Char('1') | KeyCode::Char('d') if !self.help => {
+            KeyCode::Char('1') | KeyCode::Char('d') if !self.ui.help => {
                 self.update_state(Quality::IncorrectButRemembered)
             }
-            KeyCode::Char('2') | KeyCode::Char('g') if !self.help => {
+            KeyCode::Char('2') | KeyCode::Char('g') if !self.ui.help => {
                 self.update_state(Quality::IncorrectButEasyToRecall)
             }
-            KeyCode::Char('3') | KeyCode::Char('j') if !self.help => {
+            KeyCode::Char('3') | KeyCode::Char('j') if !self.ui.help => {
                 self.update_state(Quality::CorrectWithDifficulty)
             }
-            KeyCode::Char('4') | KeyCode::Char('l') if !self.help => {
+            KeyCode::Char('4') | KeyCode::Char('l') if !self.ui.help => {
                 self.update_state(Quality::CorrectWithHesitation)
             }
-            KeyCode::Char('5') | KeyCode::Char('\'') if !self.help => {
+            KeyCode::Char('5') | KeyCode::Char('\'') if !self.ui.help => {
                 self.update_state(Quality::Perfect)
             }
             _ => {}
@@ -146,12 +152,12 @@ impl App {
 
     fn exit(&mut self) {
         (self.update_fn)(std::mem::take(&mut self.cards), &self.global_state).unwrap();
-        self.exit = true;
+        self.ui.exit = true;
     }
 
     fn help(&self) -> (Block, Text) {
         let title = Title::from(" Key Bindings ".bold());
-        let secs = self.started.elapsed().as_secs();
+        let secs = self.ui.started.elapsed().as_secs();
         let min = secs / 60;
         let secs = secs % 60;
         let instructions = Title::from(Line::from(vec![
@@ -224,12 +230,12 @@ impl App {
         let title = Title::from(
             format!(
                 " Revise Cards {}/{}",
-                std::cmp::min(self.cards.len(), 1 + self.current_card),
+                std::cmp::min(self.cards.len(), 1 + self.ui.current_card),
                 self.cards.len()
             )
             .bold(),
         );
-        let secs = self.started.elapsed().as_secs();
+        let secs = self.ui.started.elapsed().as_secs();
         let min = secs / 60;
         let secs = secs % 60;
         let instructions = Title::from(Line::from(vec![
@@ -256,28 +262,28 @@ impl App {
             .border_set(border::ROUNDED);
         let reversed =
             self.reverse_probability > 0.0 && rand::random::<f64>() < self.reverse_probability;
-        let counter_text = if self.cards.is_empty() || self.current_card >= self.cards.len() {
+        let counter_text = if self.cards.is_empty() || self.ui.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
-            let card = self.cards.get(self.current_card).unwrap();
+            let card = self.cards.get(self.ui.current_card).unwrap();
             let mut lines: Vec<Line> = Vec::new();
-            lines.push(if card.orphan {
-                Line::from(vec!["Orphan".yellow().bold()])
-            } else if card.leech {
+            lines.push(if card.leech {
                 Line::from(vec!["Leech".red().bold()])
+            } else if card.orphan {
+                Line::from(vec!["Orphan".yellow().bold()])
             } else {
                 Line::from(vec!["".into()])
             });
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Prompt".bold()]));
-            if reversed && !self.revealed {
+            if reversed && !self.ui.revealed {
                 lines.push(Line::from(vec!["<hidden>".into()]));
             } else {
                 lines.push(Line::from(vec![card.card.prompt.clone().into()]));
             }
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Response".bold()]));
-            if reversed || self.revealed {
+            if reversed || self.ui.revealed {
                 for l in card.card.response.lines() {
                     lines.push(Line::from(vec![l.into()]));
                 }
@@ -303,7 +309,7 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let (block, counter_text) = if self.help {
+        let (block, counter_text) = if self.ui.help {
             self.help()
         } else {
             self.card_revise()
