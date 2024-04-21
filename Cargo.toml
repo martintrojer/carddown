@@ -8,27 +8,27 @@ description = "A simple cli tool to keep track of (and study) flashcards in text
 readme = "README.md"
 homepage = "https://github.com/martintrojer/carddown"
 repository = "https://github.com/martintrojer/carddown"
-keywords = ["flashcards", "cli", "study", "learning", "cards", "quiz", "memorize", "memorization", "spaced-repetition"]
+keywords = ["flashcards", "study", "learning", "memorization", "spaced-repetition"]
 categories = ["education", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "*"
-blake3 = { version = "*", features = ["serde"] }
-chrono = { version = "*", features = ["serde"] }
-clap = { version = "*", features = ["derive"] }
-crossterm = "*"
-env_logger = "*"
-lazy_static = "*"
-log = "*"
-ordered-float = { version = "*", features = ["serde"] }
-rand = "*"
-ratatui = "*"
-regex = "*"
-ron = "*"
-serde = { version = "*", features = ["derive"] }
-walkdir = "*"
+anyhow = "1.0.82"
+blake3 = { version = "1.5.1", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+clap = { version = "4.5.4", features = ["derive"] }
+crossterm = "0.27.0"
+env_logger = "0.11.3"
+lazy_static = "1.4.0"
+log = "0.4.21"
+ordered-float = { version = "4.2.0", features = ["serde"] }
+rand = "0.8.5"
+ratatui = "0.26.2"
+regex = "1.10.4"
+ron = "0.8.1"
+serde = { version = "1.0.198", features = ["derive"] }
+walkdir = "2.5.0"
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = "3.10.1"
