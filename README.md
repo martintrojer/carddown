@@ -6,8 +6,8 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
 
 ## Features
 
-  - Scans you notes files for flashcards with facts that you want to remember.
-  - Keeps tracks of flashcard by hash of its contents, thus supports files being edited and cards moved around.
+  - Scans your notes-files for flashcards with facts that you want to remember.
+  - Keeps tracks of flashcards by hash of its contents, thus supports files being edited and cards moved around.
   - Extracted cards and meta-data are stored in a separate folder, the original files are never not modified.
   - Supports tags, enabling specific study sessions.
   - Supports multiple [spaced-repetition](https://en.wikipedia.org/wiki/Spaced_repetition) algorithms.
@@ -82,7 +82,7 @@ You can scan your source files as many time as you want. CARDDOWN will keep trac
 
 ```
 Arguments:
-  <PATH>  Path for file or folder to scan
+  <PATH>  Path to file or folder to scan
 
 Options:
       --file-types <FILE_TYPES>  File types to parse [default: md txt org]
