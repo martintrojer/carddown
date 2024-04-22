@@ -277,9 +277,9 @@ impl App {
             let card = self.cards.get(self.ui.current_card).unwrap();
             let mut lines: Vec<Line> = Vec::new();
             lines.push(if card.leech {
-                Line::from(vec!["Leech".red().bold()])
+                Line::from(vec!["Leech Card".red().bold()])
             } else if card.orphan {
-                Line::from(vec!["Orphan".yellow().bold()])
+                Line::from(vec!["Orphan Card".yellow().bold()])
             } else {
                 Line::from(vec!["".into()])
             });

@@ -29,6 +29,7 @@ lazy_static! {
     );
     static ref DB_FILE_PATH: String = format!("{}/cards.ron", *DB_PATH);
     static ref STATE_FILE_PATH: String = format!("{}/state.ron", *DB_PATH);
+    static ref LOCK_FILE_PATH: String = format!("{}/lock", *DB_PATH);
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -107,6 +108,11 @@ struct Args {
     /// Path to the state file
     #[arg(long, default_value = &**STATE_FILE_PATH)]
     state: PathBuf,
+
+    /// Remove lock file if it exists. Please use with caution, it other instances of carddown
+    /// are running it can lead to data loss.
+    #[arg(long)]
+    force: bool,
 }
 
 // walk file tree and parse all files
@@ -140,7 +146,7 @@ fn filter_cards(
         .filter(|c| {
             if let Some(last_revised) = c.last_revised {
                 if cram_mode {
-                    today - last_revised > chrono::Duration::hours(12)
+                    today - last_revised > chrono::Duration::hours(1)
                 } else {
                     let next_date = last_revised + chrono::Duration::days(c.state.interval as i64);
                     today >= next_date
@@ -157,11 +163,17 @@ fn filter_cards(
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    let args = Args::parse();
+
     if !PathBuf::from(&**DB_PATH).exists() {
         std::fs::create_dir_all(&**DB_PATH)?;
     }
+    if !args.force && PathBuf::from(&**LOCK_FILE_PATH).exists() {
+        log::error!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
+        std::process::exit(1);
+    }
+    std::fs::File::create(&**LOCK_FILE_PATH)?;
 
-    let args = Args::parse();
     match args.command {
         Commands::Scan {
             file_types,
@@ -229,6 +241,7 @@ fn main() -> Result<()> {
         }
     }
 
+    std::fs::remove_file(&**LOCK_FILE_PATH)?;
     Ok(())
 }
 
