@@ -81,7 +81,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                 let full_answer = caps.get(2).context("error parsing card answer")?.as_str();
                 let tags = parse_tags(full_answer);
                 cards.push(Card {
-                    id: blake3::hash(line.as_bytes()),
+                    id: blake3::hash(strip_tags(line)?.as_bytes()),
                     file: PathBuf::from(file),
                     line: line_number as u64,
                     prompt: prompt.to_string(),
@@ -90,15 +90,16 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                 });
                 state = ParseState::default();
             } else if MULTI_LINE_CARD_RE.is_match(line) {
-                state.prompt = Some(strip_tags(line)?);
-                state.card_lines.push(line.to_string());
+                let prompt = strip_tags(line)?;
+                state.prompt = Some(prompt.clone());
+                state.card_lines.push(prompt);
                 state.first_line = Some(line_number as u64);
                 state.tags = parse_tags(line);
             }
         } else if END_OF_CARD_RE.is_match(line) && !state.card_lines.is_empty() {
-            if let (Some(quest), Some(line)) = (state.prompt.clone(), state.first_line) {
+            if let (Some(prompt), Some(line)) = (state.prompt.clone(), state.first_line) {
                 let id = blake3::hash(state.card_lines.join("\n").as_bytes());
-                let answer = state
+                let response = state
                     .card_lines
                     .into_iter()
                     .skip(1)
@@ -108,8 +109,8 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     id,
                     file: PathBuf::from(file),
                     line,
-                    prompt: quest,
-                    response: answer,
+                    prompt,
+                    response,
                     tags: state.tags,
                 });
                 state = ParseState::default();
@@ -218,6 +219,24 @@ mod tests {
         fs::write(&file.path(), data).unwrap();
         let cards = parse_file(&file.path()).unwrap();
         assert!(cards.is_empty());
+    }
+
+    #[test]
+    fn test_strip_tags() {
+        let line =
+            "What is the answer to life, the universe, and everything? #flashcard #foo #test";
+        let prompt = strip_tags(line).unwrap();
+        assert_eq!(
+            prompt,
+            "What is the answer to life, the universe, and everything?"
+        );
+
+        let line = "What is the answer to life, the universe, and everything? 🧠 #foo #test";
+        let prompt = strip_tags(line).unwrap();
+        assert_eq!(
+            prompt,
+            "What is the answer to life, the universe, and everything?"
+        );
     }
 
     #[test]

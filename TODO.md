@@ -1,5 +1,6 @@
+  - [x] tags not part of card hash
+  - [ ] lock file
   - [x] cram mode
-  - [n] tags not part of card hash
   - [x] store tags without hash-char
   - [x] check entire file is valid utf8 when parsing file
   - [x] @carddown-ignore anywhere in file skips it
