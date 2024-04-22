@@ -125,7 +125,8 @@ pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
 
 pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<()> {
     if found_cards.is_empty() {
-        bail!("No cards to add to db");
+        log::info!("No cards to add to db");
+        return Ok(());
     }
     let mut card_db: CardDb = if !db_path.exists() {
         HashMap::new()
