@@ -230,6 +230,7 @@ impl Widget for &App {
             self.card_audit()
         };
         Paragraph::new(counter_text)
+            .wrap(Wrap { trim: true })
             .centered()
             .block(block)
             .render(area, buf);

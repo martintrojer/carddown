@@ -324,6 +324,7 @@ impl Widget for &App {
             self.card_revise()
         };
         Paragraph::new(counter_text)
+            .wrap(Wrap { trim: true })
             .centered()
             .block(block)
             .render(area, buf);
