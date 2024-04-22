@@ -74,8 +74,10 @@ Options:
       --reverse-probability <REVERSE_PROBABILITY>
           Likelihood that prompt and response are swapped. 0 = never, 1 = always [default: 0]
       --cram
-          Cram session. Revise all cards regardless of interval if they haven't been revised in the last 12 hours. Does not effect spaced repetition stats of the cards
-```
+          Cram session. Revise all cards regardless of interval if they haven't been revised in the last --cram-hours. Does not effect spaced repetition stats of the cards
+      --cram-hours <CRAM_HOURS>
+          Include cards in a cram sessions that hasn't been revised in the last number of hours [default: 12]
+``
 
 ### Scan
 You can scan your source files as many time as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-date as long as the prompt/response or tags haven't changed.

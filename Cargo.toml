@@ -1,6 +1,6 @@
 [package]
 name = "carddown"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["Martin Trojer <martin.trojer@gmail.com>"]
 license = "MIT"
