@@ -21,7 +21,7 @@ pub struct Card {
     pub file: PathBuf,
     pub line: u64,
     pub prompt: String,
-    pub response: String,
+    pub response: Vec<String>,
     pub tags: HashSet<String>,
 }
 
@@ -85,7 +85,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     file: PathBuf::from(file),
                     line: line_number as u64,
                     prompt: prompt.to_string(),
-                    response: strip_tags(full_answer)?.to_string(),
+                    response: vec![strip_tags(full_answer)?.to_string()],
                     tags,
                 });
                 state = ParseState::default();
@@ -99,12 +99,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
         } else if END_OF_CARD_RE.is_match(line) && !state.card_lines.is_empty() {
             if let (Some(prompt), Some(line)) = (state.prompt.clone(), state.first_line) {
                 let id = blake3::hash(state.card_lines.join("\n").as_bytes());
-                let response = state
-                    .card_lines
-                    .into_iter()
-                    .skip(1)
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let response = state.card_lines.into_iter().skip(1).collect::<Vec<_>>();
                 cards.push(Card {
                     id,
                     file: PathBuf::from(file),
@@ -153,12 +148,12 @@ mod tests {
             card.prompt,
             "What is the answer to life, the universe, and everything?"
         );
-        assert_eq!(card.response, "42\nand stuff");
+        assert_eq!(card.response, vec!["42", "and stuff"]);
         assert!(card.tags.is_empty());
         let card = &cards[1];
         assert_eq!(card.line, 4);
         assert_eq!(card.prompt, "q1");
-        assert_eq!(card.response, "a1");
+        assert_eq!(card.response, vec!["a1"]);
         assert!(card.tags.is_empty());
     }
 
@@ -180,7 +175,7 @@ mod tests {
             card.prompt,
             "What is the answer to life, the universe, and everything?"
         );
-        assert_eq!(card.response, "42");
+        assert_eq!(card.response, vec!["42"]);
         assert_eq!(
             card.tags,
             HashSet::from(["foo".to_string(), "test".to_string()])
@@ -193,7 +188,7 @@ mod tests {
         let card = &cards[0];
         assert_eq!(card.line, 0);
         assert_eq!(card.prompt, "q1");
-        assert_eq!(card.response, "a1");
+        assert_eq!(card.response, vec!["a1"]);
         assert!(card.tags.is_empty());
 
         let data = "";
@@ -256,7 +251,7 @@ mod tests {
             line: 42,
             tags: HashSet::new(),
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
-            response: "42".to_string(),
+            response: vec!["42".to_string()],
         };
         assert_eq!(card.file.to_str(), Some("test.rs"));
         assert_eq!(card.line, 42);
@@ -271,7 +266,7 @@ mod tests {
             line: 42,
             tags: HashSet::from(["test".to_string()]),
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
-            response: "42".to_string(),
+            response: vec!["42".to_string()],
         };
         let ron = ron::to_string(&card)?;
         let card2: Card = ron::from_str(&ron)?;

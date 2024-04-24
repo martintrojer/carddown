@@ -293,7 +293,7 @@ impl App {
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Response".bold()]));
             if reversed || self.ui.revealed {
-                for l in card.card.response.lines() {
+                for l in card.card.response.iter() {
                     lines.push(Line::from(vec![l.into()]));
                 }
             } else {

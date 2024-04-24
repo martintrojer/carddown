@@ -285,7 +285,7 @@ mod tests {
             file: PathBuf::from("tests/test.md"),
             line: 0,
             prompt: "What is the answer to life, the universe, and everything?".to_string(),
-            response: "42".to_string(),
+            response: vec!["42".to_string()],
             tags: HashSet::from(["card".to_string()]),
         };
         let entry = CardEntry::new(card);

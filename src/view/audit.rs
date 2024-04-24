@@ -165,57 +165,59 @@ impl App {
             Text::from(vec![Line::from(vec!["No cards to audit".into()])])
         } else {
             let card = self.cards.get(self.current_card).unwrap();
-            Text::from(vec![
-                if card.orphan {
-                    Line::from(vec!["Orphan".yellow().bold()])
-                } else if card.leech {
-                    Line::from(vec!["Leech".yellow().bold()])
-                } else {
-                    Line::from(vec!["".into()])
-                },
-                Line::from(vec![]),
-                Line::from(vec!["Prompt".bold()]),
-                Line::from(vec![card.card.prompt.clone().into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Response".bold()]),
-                Line::from(vec![card.card.response.clone().into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Tags".bold()]),
-                Line::from(vec![card
-                    .card
-                    .tags
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-                    .into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Revise Count".bold()]),
-                Line::from(vec![card.revise_count.to_string().into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Last Revised".bold()]),
-                Line::from(vec![card
-                    .last_revised
-                    .map(|d| {
-                        let l: DateTime<Local> = DateTime::from(d);
-                        l.format("%Y-%m-%d %H:%M").to_string()
-                    })
-                    .unwrap_or("never".to_string())
-                    .into()]),
-                Line::from(vec![]),
-                Line::from(vec!["Added".bold()]),
-                Line::from(vec![{
-                    let l: DateTime<Local> = DateTime::from(card.added);
-                    l.format("%Y-%m-%d %H:%M").to_string().into()
-                }]),
-                Line::from(vec![]),
-                Line::from(vec!["File".bold()]),
-                Line::from(vec![
-                    card.card.file.to_string_lossy().into(),
-                    ":".into(),
-                    card.card.line.to_string().into(),
-                ]),
-            ])
+            let mut lines: Vec<Line> = vec![];
+            lines.push(if card.orphan {
+                Line::from(vec!["Orphan".yellow().bold()])
+            } else if card.leech {
+                Line::from(vec!["Leech".yellow().bold()])
+            } else {
+                Line::from(vec!["".into()])
+            });
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Prompt".bold()]));
+            lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Response".bold()]));
+            for l in card.card.response.iter() {
+                lines.push(Line::from(vec![l.into()]));
+            }
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Tags".bold()]));
+            lines.push(Line::from(vec![card
+                .card
+                .tags
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+                .into()]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Revise Count".bold()]));
+            lines.push(Line::from(vec![card.revise_count.to_string().into()]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Last Revised".bold()]));
+            lines.push(Line::from(vec![card
+                .last_revised
+                .map(|d| {
+                    let l: DateTime<Local> = DateTime::from(d);
+                    l.format("%Y-%m-%d %H:%M").to_string()
+                })
+                .unwrap_or("never".to_string())
+                .into()]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["Added".bold()]));
+            lines.push(Line::from(vec![{
+                let l: DateTime<Local> = DateTime::from(card.added);
+                l.format("%Y-%m-%d %H:%M").to_string().into()
+            }]));
+            lines.push(Line::from(vec![]));
+            lines.push(Line::from(vec!["File".bold()]));
+            lines.push(Line::from(vec![
+                card.card.file.to_string_lossy().into(),
+                ":".into(),
+                card.card.line.to_string().into(),
+            ]));
+            Text::from(lines)
         };
 
         (block, counter_text)

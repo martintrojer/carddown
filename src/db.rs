@@ -230,7 +230,7 @@ mod tests {
             file: Path::new("foo").to_path_buf(),
             line: 0,
             prompt: "foo".to_string(),
-            response: "bar".to_string(),
+            response: vec!["bar".to_string()],
             tags: HashSet::from(["foo".to_string()]),
         };
         let card2 = Card {
@@ -238,7 +238,7 @@ mod tests {
             file: Path::new("baz").to_path_buf(),
             line: 0,
             prompt: "baz".to_string(),
-            response: "bar".to_string(),
+            response: vec!["bar".to_string()],
             tags: HashSet::from(["baz".to_string()]),
         };
         vec![
@@ -358,7 +358,7 @@ mod tests {
             file: Path::new("new").to_path_buf(),
             line: 0,
             prompt: "new".to_string(),
-            response: "new".to_string(),
+            response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
         update_db(&file.path(), vec![card], true).unwrap();
@@ -374,7 +374,7 @@ mod tests {
             file: Path::new("new").to_path_buf(),
             line: 0,
             prompt: "new".to_string(),
-            response: "new".to_string(),
+            response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
         update_db(&file.path(), vec![card.clone()], false).unwrap();
