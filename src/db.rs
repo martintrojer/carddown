@@ -51,7 +51,7 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if state_path.exists() {
         let data = fs::read_to_string(state_path)
             .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        ron::from_str(&data).context("Failed to deserialize global state")
+        serde_json::from_str(&data).context("Failed to deserialize global state")
     } else {
         log::info!("No global state found, using default");
         Ok(GlobalState::default())
@@ -74,7 +74,7 @@ pub fn refresh_global_state(state: &mut GlobalState) {
 pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
     fs::write(
         state_path,
-        ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default())
+        serde_json::to_string(state)
             .context("Failed to serialize global state")?,
     )
     .with_context(|| format!("Error writing to `{}`", state_path.display()))
@@ -85,7 +85,7 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         log::info!("No db found, creating new one");
         return Ok(HashMap::new());
     }
-    let data: Vec<CardEntry> = ron::from_str(
+    let data: Vec<CardEntry> = serde_json::from_str(
         &fs::read_to_string(db_path)
             .with_context(|| format!("Error reading `{}`", db_path.display()))
             .context("Failed to deserialise db")?,
@@ -101,7 +101,7 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     let data = db.values().collect::<Vec<_>>();
     fs::write(
         db_path,
-        ron::ser::to_string_pretty(&data, ron::ser::PrettyConfig::default())
+        serde_json::to_string(&data)
             .context("Error serializing db")?,
     )
     .with_context(|| format!("Error writing to `{}`", db_path.display()))

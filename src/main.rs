@@ -27,8 +27,8 @@ lazy_static! {
             format!("{}/.local/state", home)
         })
     );
-    static ref DB_FILE_PATH: String = format!("{}/cards.ron", *DB_PATH);
-    static ref STATE_FILE_PATH: String = format!("{}/state.ron", *DB_PATH);
+    static ref DB_FILE_PATH: String = format!("{}/cards.json", *DB_PATH);
+    static ref STATE_FILE_PATH: String = format!("{}/state.json", *DB_PATH);
     static ref LOCK_FILE_PATH: String = format!("{}/lock", *DB_PATH);
 }
 
