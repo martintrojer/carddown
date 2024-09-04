@@ -1,6 +1,6 @@
 [package]
 name = "carddown"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 authors = ["Martin Trojer <martin.trojer@gmail.com>"]
 license = "MIT"
@@ -9,7 +9,7 @@ readme = "README.md"
 homepage = "https://github.com/martintrojer/carddown"
 repository = "https://github.com/martintrojer/carddown"
 keywords = ["flashcards", "study", "learning", "memorization", "spaced-repetition"]
-categories = ["education", "command-line-utilities"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
