@@ -40,8 +40,8 @@ impl Quality {
 
 // repetitions -> ease_factor -> optimal_factor
 pub type OptimalFactorMatrix = HashMap<u64, HashMap<OrderedFloat<f64>, f64>>;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+// Clone for tests
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
     ease_factor: f64,
@@ -78,12 +78,9 @@ pub fn new_algorithm(algo: Algo) -> Box<dyn Algorithm> {
 }
 
 fn new_ease_factor(quality: &Quality, ease_factor: f64) -> f64 {
-    if ease_factor < 1.3 {
-        1.3
-    } else {
-        let q = *quality as usize;
-        ease_factor + 0.1 - (5 - q) as f64 * (0.08 + (5 - q) as f64 * 0.02)
-    }
+    let q = *quality as usize;
+    let new_ef = ease_factor + 0.1 - (5.0 - q as f64) * (0.08 + (5.0 - q as f64) * 0.02);
+    new_ef.max(1.3)
 }
 
 pub fn update_meanq(global: &mut GlobalState, quality: Quality) {
@@ -138,5 +135,22 @@ mod tests {
         let q = Quality::IncorrectAndForgotten;
         let ef = 2.5;
         assert_eq!(round_float(new_ease_factor(&q, ef), 2), 1.70);
+    }
+
+    #[test]
+    fn test_new_ease_factor_corner_cases() {
+        // Test minimum boundary (1.3)
+        let q = Quality::IncorrectAndForgotten;
+        assert_eq!(new_ease_factor(&q, 1.2), 1.3);
+        assert_eq!(new_ease_factor(&q, 1.0), 1.3);
+        
+        // Test all quality levels with a normal ease factor
+        let ef = 2.5;
+        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectAndForgotten, ef), 2), 1.70);
+        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectButRemembered, ef), 2), 1.96);
+        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectButEasyToRecall, ef), 2), 2.18);
+        assert_eq!(round_float(new_ease_factor(&Quality::CorrectWithDifficulty, ef), 2), 2.36);
+        assert_eq!(round_float(new_ease_factor(&Quality::CorrectWithHesitation, ef), 2), 2.50);
+        assert_eq!(round_float(new_ease_factor(&Quality::Perfect, ef), 2), 2.60);
     }
 }

@@ -520,4 +520,88 @@ mod tests {
         );
         assert!(cards.is_empty());
     }
+
+    #[test]
+    fn test_filter_cards_warn_leech() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.leech = true;
+        let tags = HashSet::new();
+        let include_orphans = false;
+        let leech_method = LeechMethod::Warn;
+        let cram_mode = false;
+        let cram_hours = 12;
+        let cards = filter_cards(
+            db,
+            tags,
+            include_orphans,
+            leech_method,
+            cram_mode,
+            cram_hours,
+        );
+        assert_eq!(cards.len(), 1); // LeechMethod::Warn should include leech cards
+    }
+
+    #[test]
+    fn test_filter_cards_include_orphans() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.orphan = true;
+        let tags = HashSet::new();
+        let include_orphans = true;
+        let leech_method = LeechMethod::Skip;
+        let cram_mode = false;
+        let cram_hours = 12;
+        let cards = filter_cards(
+            db,
+            tags,
+            include_orphans,
+            leech_method,
+            cram_mode,
+            cram_hours,
+        );
+        assert_eq!(cards.len(), 1); // Should include orphaned cards when include_orphans is true
+    }
+
+    #[test]
+    fn test_filter_cards_exact_cram_boundary() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.last_revised = Some(chrono::Utc::now() - chrono::Duration::hours(12));
+        let tags = HashSet::new();
+        let include_orphans = false;
+        let leech_method = LeechMethod::Skip;
+        let cram_mode = true;
+        let cram_hours = 12;
+        let cards = filter_cards(
+            db,
+            tags,
+            include_orphans,
+            leech_method,
+            cram_mode,
+            cram_hours,
+        );
+        assert_eq!(cards.len(), 1); // Should include cards exactly at the cram_hours boundary
+    }
+
+    #[test]
+    fn test_filter_cards_multiple_matching_tags() {
+        let mut db = get_card_db();
+        let entry = db.get_mut(&blake3::hash(b"test")).unwrap();
+        entry.card.tags.insert("extra_tag".to_string());
+        let tags = HashSet::from_iter(vec!["card".to_string(), "extra_tag".to_string()]);
+        let include_orphans = false;
+        let leech_method = LeechMethod::Skip;
+        let cram_mode = false;
+        let cram_hours = 12;
+        let cards = filter_cards(
+            db,
+            tags,
+            include_orphans,
+            leech_method,
+            cram_mode,
+            cram_hours,
+        );
+        assert_eq!(cards.len(), 1); // Should match when card has multiple matching tags
+    }
 }

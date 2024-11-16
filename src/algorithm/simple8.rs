@@ -70,4 +70,42 @@ mod tests {
         assert_eq!(state.interval, 0);
         assert_eq!(state.repetitions, 0);
     }
+
+    #[test]
+    fn test_simple8_corner_cases() {
+        let mut state = CardState::default();
+        let mut global = GlobalState::default();
+        let simple8 = Simple8 {};
+
+        // Test first interval with multiple failures
+        state.failed_count = 5;
+        simple8.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert!(state.interval > 0 && state.interval < 2); // Should be reduced due to failures
+
+        // Test very high repetition count
+        state = CardState::default();
+        state.repetitions = 20;
+        state.interval = 100;
+        update_meanq(&mut global, Quality::Perfect);
+        simple8.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert!(state.interval > 100); // Should still increase but at a slower rate
+
+        // Test boundary case with zero interval
+        state = CardState::default();
+        state.repetitions = 1;
+        state.interval = 0;
+        simple8.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert!(state.interval > 0); // Should set a positive interval
+
+        // Test consecutive failures
+        state = CardState::default();
+        state.interval = 10;
+        state.repetitions = 3;
+        simple8.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.interval, 0);
+        assert_eq!(state.repetitions, 0);
+        simple8.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.interval, 0);
+        assert_eq!(state.repetitions, 0);
+    }
 }

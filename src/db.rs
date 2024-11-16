@@ -11,8 +11,8 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+// Clone for tests
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardEntry {
     pub added: DateTime<Utc>,
     pub card: Card,
@@ -85,12 +85,16 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         log::info!("No db found, creating new one");
         return Ok(HashMap::new());
     }
-    let data: Vec<CardEntry> = serde_json::from_str(
-        &fs::read_to_string(db_path)
-            .with_context(|| format!("Error reading `{}`", db_path.display()))
-            .context("Failed to deserialise db")?,
-    )
-    .context("Error deserializing db")?;
+    let data = fs::read_to_string(db_path)
+        .with_context(|| format!("Error reading `{}`", db_path.display()))?;
+    
+    // Handle empty file case
+    if data.trim().is_empty() {
+        return Ok(HashMap::new());
+    }
+    
+    let data: Vec<CardEntry> = serde_json::from_str(&data)
+        .context("Failed to deserialise db")?;
     Ok(data
         .into_iter()
         .map(|entry| (entry.card.id, entry))
@@ -385,5 +389,81 @@ mod tests {
             db.keys().collect::<HashSet<_>>(),
             read_db.keys().collect::<HashSet<_>>()
         );
+    }
+
+    #[test]
+    fn test_empty_db_operations() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        
+        // Test operations on empty DB
+        let empty_db = get_db(&file.path()).unwrap();
+        assert!(empty_db.is_empty());
+        
+        // Test updating empty DB
+        update_db(&file.path(), vec![], true).unwrap();
+        assert!(get_db(&file.path()).unwrap().is_empty());
+        
+        // Test deleting from empty DB
+        let result = delete_card(&file.path(), blake3::hash(b"nonexistent"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_concurrent_card_updates() {
+        let (file, _) = write_a_db(get_card_entries());
+        let entries = get_card_entries();
+        
+        // Modify same card twice with different states
+        let mut entry1 = entries[0].clone();
+        let mut entry2 = entries[0].clone();
+        
+        entry1.state.interval = 5;
+        entry2.state.interval = 10;
+        
+        // Update with both modifications
+        update_cards(&file.path(), vec![entry1.clone(), entry2.clone()]).unwrap();
+        
+        // Last update should win
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(read_db.get(&entry1.card.id).unwrap().state.interval, 10);
+    }
+
+    #[test]
+    fn test_update_db_with_duplicate_cards() {
+        let (file, _) = write_a_db(vec![]);
+        let card = Card {
+            id: blake3::hash(b"duplicate"),
+            file: Path::new("test").to_path_buf(),
+            line: 0,
+            prompt: "test".to_string(),
+            response: vec!["test".to_string()],
+            tags: HashSet::new(),
+        };
+        
+        // Add same card twice in single update
+        let cards = vec![card.clone(), card.clone()];
+        update_db(&file.path(), cards, true).unwrap();
+        
+        let read_db = get_db(&file.path()).unwrap();
+        assert_eq!(read_db.len(), 1); // Should only store one copy
+    }
+
+    #[test]
+    fn test_global_state_edge_cases() {
+        let mut state = GlobalState::default();
+        
+        // Test with very old last session
+        state.last_revise_session = Some(Utc::now() - chrono::Duration::days(365));
+        state.mean_q = Some(4.2);
+        state.total_cards_revised = 100;
+        
+        refresh_global_state(&mut state);
+        assert_eq!(state.total_cards_revised, 0);
+        assert!(state.mean_q.is_none());
+        
+        // Test with future timestamp (should handle gracefully)
+        state.last_revise_session = Some(Utc::now() + chrono::Duration::days(1));
+        refresh_global_state(&mut state);
+        assert!(state.last_revise_session.unwrap() <= Utc::now());
     }
 }

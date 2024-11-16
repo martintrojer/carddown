@@ -78,6 +78,9 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     .context("error parsing card prompt")?
                     .as_str()
                     .trim();
+                if prompt.is_empty() {
+                    continue;
+                }
                 let full_answer = caps.get(2).context("error parsing card answer")?.as_str();
                 let tags = parse_tags(full_answer);
                 cards.push(Card {
@@ -91,6 +94,9 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                 state = ParseState::default();
             } else if MULTI_LINE_CARD_RE.is_match(line) {
                 let prompt = strip_tags(line)?;
+                if prompt.is_empty() {
+                    continue;
+                }
                 state.prompt = Some(prompt.clone());
                 state.card_lines.push(prompt);
                 state.first_line = Some(line_number as u64);
@@ -272,5 +278,66 @@ mod tests {
         let card2: Card = serde_json::from_str(&data)?;
         assert_eq!(card, card2);
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_edge_cases() {
+        let file = new_md_file().unwrap();
+
+        // Test empty prompt
+        let data = "#flashcard\n\na1\n---";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert_eq!(cards.len(), 0);
+
+        // Test empty lines between prompt and response
+        let data = "prompt #flashcard\nq1\n\n\na1\n---";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].prompt, "prompt");
+        assert_eq!(cards[0].response, vec!["q1","", "", "a1"]);
+
+        // Test multiple separators
+        let data = "prompt#flashcard\nq1\na1\n---\n***\n---";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].response, vec!["q1","a1"]);
+
+        // Test mixed flashcard markers
+        let data = "q1: a1 #flashcard\nq2: a2 🧠";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert_eq!(cards.len(), 2);
+
+        // Test tags with special characters
+        let data = "q1: a1 #flashcard #test-123 #test_456 #123test";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert_eq!(cards[0].tags.len(), 3);
+    }
+
+    #[test]
+    fn test_malformed_cards() {
+        let file = new_md_file().unwrap();
+        
+        // Test incomplete multiline card (missing separator)
+        let data = "prompt #flashcard\nq1\na1";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert!(cards.is_empty());
+
+        // Test malformed one-line card (should be empty because it doesn't match ONE_LINE_CARD_RE)
+        let data = ": answer #flashcard";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert!(cards.is_empty());
+
+        // Test empty prompt in multiline card
+        let data = "#flashcard\n\na1\n---";
+        fs::write(&file.path(), data).unwrap();
+        let cards = parse_file(&file.path()).unwrap();
+        assert!(cards.is_empty());
     }
 }

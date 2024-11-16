@@ -7,8 +7,8 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
 ## Features
 
   - Scans your notes for flashcards with facts that you want to remember.
-  - Keeps tracks of flashcards by hash of its contents, thus supports files being edited and cards moved around.
-  - Extracted cards and meta-data are stored in a separate folder, the original files are never not modified.
+  - Keeps track of flashcards by hash of its contents, thus supporting files being edited and cards moved around.
+  - Extracted cards and meta-data are stored in a separate folder, the original files are never modified.
   - Supports tags, enabling specific study sessions.
   - Supports multiple [spaced-repetition](https://en.wikipedia.org/wiki/Spaced_repetition) algorithms.
   - No dependencies, fast, human-readable non-binary formats.
@@ -30,7 +30,7 @@ CARDDOWN has 3 commands:
 Audit and Revise mode use a terminal UI, with help prompts to describe key bindings.
 
 ### Revise
-When you launch a revise session, you will be presented with all flashcards that a due to be revised.
+When you launch a revise session, you will be presented with all flashcards that are due to be revised.
 
 The main flow for each card is as follows:
 
@@ -49,7 +49,7 @@ The main flow for each card is as follows:
 | Incorrect But  Remembered    | 1     |
 | Incorrect And Forgotten      | 0     |
 
-Qualities of 0, 1 and 2 considered a failure and will reset the card to the beginning of the learning queue.
+Qualities of 0, 1 and 2 are considered a failure and will reset the card to the beginning of the learning queue.
 
 The following flags are used to configure the revise session:
 
@@ -77,10 +77,10 @@ Options:
           Cram session. Revise all cards regardless of interval if they haven't been revised in the last --cram-hours. Does not effect spaced repetition stats of the cards
       --cram-hours <CRAM_HOURS>
           Include cards in a cram sessions that hasn't been revised in the last number of hours [default: 12]
-``
+```
 
 ### Scan
-You can scan your source files as many time as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-date as long as the prompt/response or tags haven't changed.
+You can scan your source files as many times as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-data as long as the prompt/response or tags haven't changed.
 
 ```
 Arguments:
@@ -94,7 +94,7 @@ Options:
 If `--full` flag is not set (default), CARDDOWN will do an incremental scan which will not generate orphan cards.
 
 ### Audit
-In audit-mode you can review your orphan an leech cards. Orphan cards can be removed from the CARDDOWN database in the audit view, but leeches has to be fixed in the source files.
+In audit mode, you can review your orphan and leech cards. Orphan cards can be removed from the CARDDOWN database in the audit view, but leeches have to be fixed in the source files.
 
 ## Writing flashcards
 CARDDOWN supports single and multi-line flashcards. These flashcards can be anywhere in your markdown/text files.
@@ -135,24 +135,19 @@ See [test.md](tests/test.md) for an example of how to write flashcards.
 
 ## Terminology
 
-  - *Leech*
-    A card that you have failed to remember multiple times. A Leech cards slows your learning progress
-    and should be pruned from your deck, spit into multiple cards or written in a different way.
-  - *Orphan*
-    A card that doesn't exists in its current form in the source files. This can happen if you
+  - *Leech*:
+    A card that you have failed to remember multiple times. A leech card slows your learning progress
+    and should be pruned from your deck, split into multiple cards, or written in a different way.
+  - *Orphan*:
+    A card that doesn't exist in its current form in the source files. This can happen if you
     change or delete a card in the source file. Orphan cards can be pruned by the audit command.
 
 ## Rationale
 
-- I have a lot of notes in markdown, some of them contains facts that I want to be able to recall easily.
-- I want to use a cli tool for drilling these facts that is simple and easy to use and install.
-- I want to easily mark facts in my notes (turn them into flashcards).
-- I want a single markdown file to contain an arbitrary number of flashcards.
-- I edit my notes often, and move stuff around within and between files.
-- I want to the tool to keep track of the cards I want to practice, even when they move.
+- I want to use a CLI tool for drilling these facts that is simple and easy to use and install.
+- I want the tool to keep track of the cards I want to practice, even when they move.
 - I want to be able to constrain what to practice via tags.
-- I want to the tool to keep track of my progress and adjust the practice schedule accordingly.
-- I want to explore different spaced repetition algorithms.
+- I want the tool to keep track of my progress and adjust the practice schedule accordingly.
 
 ## Acknowledgements
 

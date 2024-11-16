@@ -63,4 +63,62 @@ mod tests {
         assert_eq!(state.repetitions, 0);
         assert_eq!(state.ease_factor, prev_ef);
     }
+
+    #[test]
+    fn test_sm2_edge_cases() {
+        let mut state = CardState::default();
+        let mut global = GlobalState::default();
+        let sm2 = Sm2 {};
+
+        // Test consecutive failures
+        sm2.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.interval, 0);
+        assert_eq!(state.repetitions, 0);
+        assert_eq!(state.ease_factor, 2.5); // Default ease factor
+
+        sm2.update_state(&Quality::IncorrectButRemembered, &mut state, &mut global);
+        assert_eq!(state.interval, 0);
+        assert_eq!(state.repetitions, 0);
+        assert_eq!(state.ease_factor, 2.5); // Should remain unchanged
+
+        // Test recovery after failure
+        sm2.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert_eq!(state.interval, 1);
+        assert_eq!(state.repetitions, 1);
+        assert_eq!(state.ease_factor, 2.6);
+
+        // Test minimum ease factor boundary
+        state.ease_factor = 1.3; // Set to minimum
+        sm2.update_state(&Quality::CorrectWithDifficulty, &mut state, &mut global);
+        assert_eq!(state.interval, 6);
+        assert_eq!(state.repetitions, 2);
+        assert_eq!(round_float(state.ease_factor, 2), 1.3); // Should not go below 1.3
+
+        // Test very large intervals
+        state.interval = 1000;
+        state.ease_factor = 2.5;
+        sm2.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert_eq!(state.interval, 2500);
+        assert_eq!(state.repetitions, 3);
+
+        // Test all quality levels
+        state = CardState::default(); // Reset state
+        for quality in [
+            Quality::IncorrectAndForgotten,
+            Quality::IncorrectButRemembered,
+            Quality::IncorrectButEasyToRecall,
+            Quality::CorrectWithDifficulty,
+            Quality::CorrectWithHesitation,
+            Quality::Perfect,
+        ] {
+            sm2.update_state(&quality, &mut state, &mut global);
+            if quality.failed() {
+                assert_eq!(state.interval, 0);
+                assert_eq!(state.repetitions, 0);
+            } else {
+                assert!(state.interval > 0);
+                assert!(state.repetitions > 0);
+            }
+        }
+    }
 }

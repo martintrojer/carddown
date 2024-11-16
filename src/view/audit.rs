@@ -238,3 +238,92 @@ impl Widget for &App {
             .render(area, buf);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use crate::algorithm::CardState;
+    use chrono::Utc;
+    use std::collections::HashSet;
+
+    fn create_test_card() -> CardEntry {
+        CardEntry {
+            card: crate::card::Card {
+                id: blake3::hash(b"test"),
+                prompt: "test prompt".to_string(),
+                response: vec!["test response".to_string()],
+                tags: HashSet::from_iter(vec!["test_tag".to_string()]),
+                file: PathBuf::from("test/file.md"),
+                line: 1,
+            },
+            revise_count: 0,
+            last_revised: None,
+            added: Utc::now(),
+            orphan: false,
+            leech: false,
+            state: CardState::default(),
+        }
+    }
+
+    #[test]
+    fn test_navigation() {
+        let cards = vec![create_test_card(), create_test_card(), create_test_card()];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> = Box::new(|_| Ok(()));
+        let mut app = App::new(cards, delete_fn);
+
+        // Test initial state
+        assert_eq!(app.current_card, 0);
+
+        // Test right navigation
+        app.handle_key_event(KeyEvent::new(KeyCode::Right, event::KeyModifiers::empty()));
+        assert_eq!(app.current_card, 1);
+
+        // Test left navigation
+        app.handle_key_event(KeyEvent::new(KeyCode::Left, event::KeyModifiers::empty()));
+        assert_eq!(app.current_card, 0);
+
+        // Test bounds
+        app.handle_key_event(KeyEvent::new(KeyCode::Left, event::KeyModifiers::empty()));
+        assert_eq!(app.current_card, 0); // Should not go below 0
+    }
+
+    #[test]
+    fn test_delete_flow() {
+        let cards = vec![create_test_card()];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> = Box::new(|_| Ok(()));
+        let mut app = App::new(cards, delete_fn);
+
+        // Test delete initiation
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
+        assert!(app.sure);
+
+        // Test cancel delete
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('n'), event::KeyModifiers::empty()));
+        assert!(!app.sure);
+        assert_eq!(app.cards.len(), 1);
+
+        // Test confirm delete
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('y'), event::KeyModifiers::empty()));
+        assert!(!app.sure);
+        assert_eq!(app.cards.len(), 0);
+    }
+
+    #[test]
+    fn test_leech_card_deletion() {
+        let mut card = create_test_card();
+        card.leech = true;
+        let cards = vec![card];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> = Box::new(|_| Ok(()));
+        let mut app = App::new(cards, delete_fn);
+
+        // Attempt to delete leech card
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('y'), event::KeyModifiers::empty()));
+        
+        // Verify leech card wasn't deleted
+        assert_eq!(app.cards.len(), 1);
+        assert!(app.cards[0].leech);
+    }
+}
