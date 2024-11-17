@@ -40,81 +40,90 @@ enum LeechMethod {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Scan file or folder for cards
+    /// Scan files for flashcards and add them to the database
     Scan {
-        /// File types to parse
+        /// File extensions to scan (e.g., md, txt, org)
         #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
         file_types: Vec<String>,
 
-        /// Full scan (default incremental), can generate orphans
+        /// Perform a complete rescan instead of only checking modified files.
+        /// Warning: May generate orphaned cards if files were deleted
         #[arg(long)]
         full: bool,
 
-        /// Path to file or folder to scan
+        /// Path to a file or directory to scan for flashcards
         path: PathBuf,
     },
-    /// Audit the card database for orphaned and leech cards
+    /// Review database for problematic cards (orphaned or leech cards).
+    /// Orphaned cards: Cards whose source files no longer exist.
+    /// Leech cards: Cards that are consistently difficult to remember
     Audit {},
-    /// Revise pending flahscards
+    /// Start a flashcard review session
     Revise {
+        /// Limit the number of cards to review in this session
         #[arg(long, default_value_t = 30)]
         maximum_cards_per_session: usize,
 
-        /// in minutes
+        /// Maximum length of review session in minutes
         #[arg(long, default_value_t = 20)]
         maximum_duration_of_session: usize,
 
-        /// Threshold before a item is defined as a leech.
+        /// Number of failures before a card is marked as a leech
         #[arg(long, default_value_t = 15)]
         leech_failure_threshold: usize,
 
+        /// How to handle leech cards during review:
+        /// skip - Skip leech cards entirely.
+        /// warn - Show leech cards but display a warning
         #[arg(long, value_enum, default_value_t = LeechMethod::Skip)]
         leech_method: LeechMethod,
 
+        /// Spaced repetition algorithm to determine card intervals
         #[arg(long, value_enum, default_value_t = Algo::SM5)]
         algorithm: Algo,
 
-        /// Tags to filter cards, no tags matches all cards
+        /// Only show cards with these tags (shows all cards if no tags specified)
         #[arg(long)]
         tag: Vec<String>,
 
-        /// include orphaned cards
+        /// Include cards whose source files no longer exist
         #[arg(long)]
         include_orphans: bool,
 
-        /// Likelihood that prompt and response are swapped.
-        /// 0 = never, 1 = always
+        /// Chance to swap question/answer (0.0 = never, 1.0 = always)
         #[arg(long, default_value_t = 0.0)]
         reverse_probability: f64,
 
-        /// Cram session. Revise all cards regardless of interval if they haven't been revised
-        /// in the last --cram-hours. Does not effect spaced repetition stats of the cards.
+        /// Enable review of all cards not seen in --cram-hours, ignoring intervals
+        /// Note: Reviews in cram mode don't affect card statistics
         #[arg(long)]
         cram: bool,
 
-        /// Include cards in a cram sessions that hasn't been revised in the last number of hours.
+        /// Hours since last review for cards to include in cram mode
         #[arg(long, default_value_t = 12)]
         cram_hours: usize,
     },
 }
 
-/// CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text files.
+/// CARDDOWN - A command-line flashcard system that manages cards from text files
+/// Cards are extracted from text files and can be reviewed using spaced repetition.
+/// The system tracks review history and automatically schedules cards for optimal learning.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
     #[command(subcommand)]
     command: Commands,
 
-    /// Path to the database file
+    /// Location of the card database file
     #[arg(long, default_value = &**DB_FILE_PATH)]
     db: PathBuf,
 
-    /// Path to the state file
+    /// Location of the program state file
     #[arg(long, default_value = &**STATE_FILE_PATH)]
     state: PathBuf,
 
-    /// Remove lock file if it exists. Please use with caution, it other instances of carddown
-    /// are running it can lead to data loss.
+    /// Override file locking mechanism.
+    /// Warning: Only use if no other carddown instances are running
     #[arg(long)]
     force: bool,
 }

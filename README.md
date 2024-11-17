@@ -54,29 +54,31 @@ Qualities of 0, 1 and 2 are considered a failure and will reset the card to the 
 The following flags are used to configure the revise session:
 
 ```
+Start a flashcard review session
+
 Usage: carddown revise [OPTIONS]
 
 Options:
       --maximum-cards-per-session <MAXIMUM_CARDS_PER_SESSION>
-          [default: 30]
+          Limit the number of cards to review in this session [default: 30]
       --maximum-duration-of-session <MAXIMUM_DURATION_OF_SESSION>
-          in minutes [default: 20]
+          Maximum length of review session in minutes [default: 20]
       --leech-failure-threshold <LEECH_FAILURE_THRESHOLD>
-          Threshold before a item is defined as a leech [default: 15]
+          Number of failures before a card is marked as a leech [default: 15]
       --leech-method <LEECH_METHOD>
-          [default: skip] [possible values: skip, warn]
+          How to handle leech cards during review: skip - Skip leech cards entirely. warn - Show leech cards but display a warning [default: skip] [possible values: skip, warn]
       --algorithm <ALGORITHM>
-          [default: sm5] [possible values: sm2, sm5, simple8]
+          Spaced repetition algorithm to determine card intervals [default: sm5] [possible values: sm2, sm5, simple8]
       --tag <TAG>
-          Tags to filter cards, no tags matches all cards
+          Only show cards with these tags (shows all cards if no tags specified)
       --include-orphans
-          include orphaned cards
+          Include cards whose source files no longer exist
       --reverse-probability <REVERSE_PROBABILITY>
-          Likelihood that prompt and response are swapped. 0 = never, 1 = always [default: 0]
+          Chance to swap question/answer (0.0 = never, 1.0 = always) [default: 0]
       --cram
-          Cram session. Revise all cards regardless of interval if they haven't been revised in the last --cram-hours. Does not effect spaced repetition stats of the cards
+          Enable review of all cards not seen in --cram-hours, ignoring intervals Note: Reviews in cram mode don't affect card statistics
       --cram-hours <CRAM_HOURS>
-          Include cards in a cram sessions that hasn't been revised in the last number of hours [default: 12]
+          Hours since last review for cards to include in cram mode [default: 12]
 ```
 
 ### Scan
