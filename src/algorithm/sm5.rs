@@ -171,11 +171,17 @@ mod tests {
         let sm5 = Sm5 {};
 
         // Test initial optimal factor for first repetition
-        assert_eq!(get_optimal_factor(0, 2.5, &global.optimal_factor_matrix), 4.0);
-        
+        assert_eq!(
+            get_optimal_factor(0, 2.5, &global.optimal_factor_matrix),
+            4.0
+        );
+
         // Test optimal factor fallback to ease factor for non-zero repetitions
-        assert_eq!(get_optimal_factor(1, 2.5, &global.optimal_factor_matrix), 2.5);
-        
+        assert_eq!(
+            get_optimal_factor(1, 2.5, &global.optimal_factor_matrix),
+            2.5
+        );
+
         // Test optimal factor after a perfect review
         sm5.update_state(&Quality::Perfect, &mut state, &mut global);
         let of = get_optimal_factor(0, 2.6, &global.optimal_factor_matrix);
@@ -193,7 +199,7 @@ mod tests {
         assert_eq!(state.repetitions, 1);
         assert!(state.ease_factor > 2.5);
         assert!(state.interval > 0);
-        
+
         // Test Quality::CorrectWithHesitation
         let mut state = CardState::default();
         sm5.update_state(&Quality::CorrectWithHesitation, &mut state, &mut global);
@@ -250,8 +256,6 @@ mod tests {
         for _ in 0..5 {
             sm5.update_state(&Quality::Perfect, &mut state, &mut global);
             assert!(state.ease_factor >= previous_ef);
-            
+        }
     }
-}
-
 }

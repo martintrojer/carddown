@@ -143,14 +143,29 @@ mod tests {
         let q = Quality::IncorrectAndForgotten;
         assert_eq!(new_ease_factor(&q, 1.2), 1.3);
         assert_eq!(new_ease_factor(&q, 1.0), 1.3);
-        
+
         // Test all quality levels with a normal ease factor
         let ef = 2.5;
-        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectAndForgotten, ef), 2), 1.70);
-        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectButRemembered, ef), 2), 1.96);
-        assert_eq!(round_float(new_ease_factor(&Quality::IncorrectButEasyToRecall, ef), 2), 2.18);
-        assert_eq!(round_float(new_ease_factor(&Quality::CorrectWithDifficulty, ef), 2), 2.36);
-        assert_eq!(round_float(new_ease_factor(&Quality::CorrectWithHesitation, ef), 2), 2.50);
+        assert_eq!(
+            round_float(new_ease_factor(&Quality::IncorrectAndForgotten, ef), 2),
+            1.70
+        );
+        assert_eq!(
+            round_float(new_ease_factor(&Quality::IncorrectButRemembered, ef), 2),
+            1.96
+        );
+        assert_eq!(
+            round_float(new_ease_factor(&Quality::IncorrectButEasyToRecall, ef), 2),
+            2.18
+        );
+        assert_eq!(
+            round_float(new_ease_factor(&Quality::CorrectWithDifficulty, ef), 2),
+            2.36
+        );
+        assert_eq!(
+            round_float(new_ease_factor(&Quality::CorrectWithHesitation, ef), 2),
+            2.50
+        );
         assert_eq!(round_float(new_ease_factor(&Quality::Perfect, ef), 2), 2.60);
     }
 }

@@ -242,10 +242,10 @@ impl Widget for &App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::algorithm::CardState;
     use chrono::Utc;
     use std::collections::HashSet;
+    use std::path::PathBuf;
 
     fn create_test_card() -> CardEntry {
         CardEntry {
@@ -295,17 +295,29 @@ mod tests {
         let mut app = App::new(cards, delete_fn);
 
         // Test delete initiation
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('d'),
+            event::KeyModifiers::empty(),
+        ));
         assert!(app.sure);
 
         // Test cancel delete
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('n'), event::KeyModifiers::empty()));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('n'),
+            event::KeyModifiers::empty(),
+        ));
         assert!(!app.sure);
         assert_eq!(app.cards.len(), 1);
 
         // Test confirm delete
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('y'), event::KeyModifiers::empty()));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('d'),
+            event::KeyModifiers::empty(),
+        ));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('y'),
+            event::KeyModifiers::empty(),
+        ));
         assert!(!app.sure);
         assert_eq!(app.cards.len(), 0);
     }
@@ -319,9 +331,15 @@ mod tests {
         let mut app = App::new(cards, delete_fn);
 
         // Attempt to delete leech card
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), event::KeyModifiers::empty()));
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('y'), event::KeyModifiers::empty()));
-        
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('d'),
+            event::KeyModifiers::empty(),
+        ));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('y'),
+            event::KeyModifiers::empty(),
+        ));
+
         // Verify leech card wasn't deleted
         assert_eq!(app.cards.len(), 1);
         assert!(app.cards[0].leech);

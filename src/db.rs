@@ -74,8 +74,7 @@ pub fn refresh_global_state(state: &mut GlobalState) {
 pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
     fs::write(
         state_path,
-        serde_json::to_string(state)
-            .context("Failed to serialize global state")?,
+        serde_json::to_string(state).context("Failed to serialize global state")?,
     )
     .with_context(|| format!("Error writing to `{}`", state_path.display()))
 }
@@ -87,14 +86,13 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
     }
     let data = fs::read_to_string(db_path)
         .with_context(|| format!("Error reading `{}`", db_path.display()))?;
-    
+
     // Handle empty file case
     if data.trim().is_empty() {
         return Ok(HashMap::new());
     }
-    
-    let data: Vec<CardEntry> = serde_json::from_str(&data)
-        .context("Failed to deserialise db")?;
+
+    let data: Vec<CardEntry> = serde_json::from_str(&data).context("Failed to deserialise db")?;
     Ok(data
         .into_iter()
         .map(|entry| (entry.card.id, entry))
@@ -105,8 +103,7 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     let data = db.values().collect::<Vec<_>>();
     fs::write(
         db_path,
-        serde_json::to_string(&data)
-            .context("Error serializing db")?,
+        serde_json::to_string(&data).context("Error serializing db")?,
     )
     .with_context(|| format!("Error writing to `{}`", db_path.display()))
 }
@@ -394,15 +391,15 @@ mod tests {
     #[test]
     fn test_empty_db_operations() {
         let file = tempfile::NamedTempFile::new().unwrap();
-        
+
         // Test operations on empty DB
         let empty_db = get_db(&file.path()).unwrap();
         assert!(empty_db.is_empty());
-        
+
         // Test updating empty DB
         update_db(&file.path(), vec![], true).unwrap();
         assert!(get_db(&file.path()).unwrap().is_empty());
-        
+
         // Test deleting from empty DB
         let result = delete_card(&file.path(), blake3::hash(b"nonexistent"));
         assert!(result.is_err());
@@ -412,17 +409,17 @@ mod tests {
     fn test_concurrent_card_updates() {
         let (file, _) = write_a_db(get_card_entries());
         let entries = get_card_entries();
-        
+
         // Modify same card twice with different states
         let mut entry1 = entries[0].clone();
         let mut entry2 = entries[0].clone();
-        
+
         entry1.state.interval = 5;
         entry2.state.interval = 10;
-        
+
         // Update with both modifications
         update_cards(&file.path(), vec![entry1.clone(), entry2.clone()]).unwrap();
-        
+
         // Last update should win
         let read_db = get_db(&file.path()).unwrap();
         assert_eq!(read_db.get(&entry1.card.id).unwrap().state.interval, 10);
@@ -439,11 +436,11 @@ mod tests {
             response: vec!["test".to_string()],
             tags: HashSet::new(),
         };
-        
+
         // Add same card twice in single update
         let cards = vec![card.clone(), card.clone()];
         update_db(&file.path(), cards, true).unwrap();
-        
+
         let read_db = get_db(&file.path()).unwrap();
         assert_eq!(read_db.len(), 1); // Should only store one copy
     }
@@ -451,16 +448,16 @@ mod tests {
     #[test]
     fn test_global_state_edge_cases() {
         let mut state = GlobalState::default();
-        
+
         // Test with very old last session
         state.last_revise_session = Some(Utc::now() - chrono::Duration::days(365));
         state.mean_q = Some(4.2);
         state.total_cards_revised = 100;
-        
+
         refresh_global_state(&mut state);
         assert_eq!(state.total_cards_revised, 0);
         assert!(state.mean_q.is_none());
-        
+
         // Test with future timestamp (should handle gracefully)
         state.last_revise_session = Some(Utc::now() + chrono::Duration::days(1));
         refresh_global_state(&mut state);

@@ -336,9 +336,9 @@ mod tests {
     use super::*;
     use crate::algorithm::new_algorithm;
     use crate::algorithm::Algo;
-    use std::path::PathBuf;
     use crate::card::Card;
     use std::collections::HashSet;
+    use std::path::PathBuf;
 
     fn create_test_app() -> App {
         let algorithm = new_algorithm(Algo::SM2);
@@ -350,28 +350,26 @@ mod tests {
             response: vec!["test response".to_string()],
             tags: HashSet::new(),
         };
-        let cards = vec![
-            CardEntry {
-                added: chrono::Utc::now(),
-                card,
-                last_revised: None,
-                revise_count: 0,
-                state: Default::default(),
-                leech: false,
-                orphan: false,
-            }
-        ];
+        let cards = vec![CardEntry {
+            added: chrono::Utc::now(),
+            card,
+            last_revised: None,
+            revise_count: 0,
+            state: Default::default(),
+            leech: false,
+            orphan: false,
+        }];
         let global_state = GlobalState::default();
-        fn update_fn(_cards:Vec<CardEntry>, _state: &GlobalState)  -> Result<()> {
-                Ok(())
+        fn update_fn(_cards: Vec<CardEntry>, _state: &GlobalState) -> Result<()> {
+            Ok(())
         }
         App::new(
             algorithm,
             cards,
             global_state,
-            3, // leech_threshold
-            3600, // max_duration
-            0.0, // reverse_probability
+            3,      // leech_threshold
+            3600,   // max_duration
+            0.0,    // reverse_probability
             vec![], // tags
             Box::new(update_fn),
         )
@@ -386,10 +384,10 @@ mod tests {
     #[test]
     fn test_update_state_quality() {
         let mut app = create_test_app();
-        
+
         // Test card state updates
         app.update_state(Quality::Perfect);
-        
+
         let card = &app.cards[0];
         assert_eq!(card.revise_count, 1);
         assert!(card.last_revised.is_some());
@@ -399,13 +397,13 @@ mod tests {
     #[test]
     fn test_leech_threshold() {
         let mut app = create_test_app();
-        
+
         // Fail the card enough times to trigger leech status
         for _ in 0..3 {
             app.ui.current_card = 0; // Reset card index for each attempt
             app.update_state(Quality::IncorrectAndForgotten);
         }
-        
+
         let card = &app.cards[0];
         assert!(card.leech);
         assert_eq!(card.state.failed_count, 3);
@@ -414,11 +412,11 @@ mod tests {
     #[test]
     fn test_handle_key_events() {
         let mut app = create_test_app();
-        
+
         // Test reveal
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         // Test quality input
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
@@ -429,11 +427,11 @@ mod tests {
     fn test_empty_card_list() {
         let mut app = create_test_app();
         app.cards.clear();
-        
+
         // Should handle empty card list gracefully
         app.update_state(Quality::Perfect);
         assert_eq!(app.ui.current_card, 0);
-        
+
         // UI should show no cards message
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
@@ -444,11 +442,11 @@ mod tests {
         let mut app = create_test_app();
         let second_card = app.cards[0].clone(); // Clone first card for second entry
         app.cards.push(second_card);
-        
+
         assert_eq!(app.ui.current_card, 0);
         app.update_state(Quality::Perfect);
         assert_eq!(app.ui.current_card, 1);
-        
+
         // After processing the last card, it should trigger exit
         app.ui.current_card = app.cards.len(); // Simulate reaching end of cards
         app.update_state(Quality::Perfect);
@@ -461,16 +459,16 @@ mod tests {
         let mut app = create_test_app();
         let second_card = app.cards[0].clone();
         app.cards.push(second_card);
-        
+
         // Process first card
         assert_eq!(app.ui.current_card, 0);
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 1);
-        
+
         // Process second (last) card
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 2); // Will be at end of cards
-        
+
         // One more update should trigger exit
         app.update_state(Quality::Perfect);
         assert!(app.ui.exit);
@@ -479,18 +477,18 @@ mod tests {
     #[test]
     fn test_help_screen() {
         let mut app = create_test_app();
-        
+
         // Initially help should be hidden
         assert!(!app.ui.help);
-        
+
         // Toggle help on
         app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), event::KeyModifiers::NONE));
         assert!(app.ui.help);
-        
+
         // Regular keys should be ignored when help is shown
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
-        
+
         // Toggle help off
         app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), event::KeyModifiers::NONE));
         assert!(!app.ui.help);
@@ -498,7 +496,6 @@ mod tests {
 
     #[test]
     fn test_quality_inputs() {
-        
         // Test all quality inputs with both number and letter keys
         let quality_keys = [
             (('0', 'a'), Quality::IncorrectAndForgotten),
@@ -511,14 +508,20 @@ mod tests {
 
         for ((num_key, letter_key), _expected_quality) in quality_keys.iter() {
             let mut app = create_test_app();
-            
+
             // Test number key
-            app.handle_key_event(KeyEvent::new(KeyCode::Char(*num_key), event::KeyModifiers::NONE));
+            app.handle_key_event(KeyEvent::new(
+                KeyCode::Char(*num_key),
+                event::KeyModifiers::NONE,
+            ));
             assert_eq!(app.ui.current_card, 1);
-            
+
             // Reset and test letter key
             app = create_test_app();
-            app.handle_key_event(KeyEvent::new(KeyCode::Char(*letter_key), event::KeyModifiers::NONE));
+            app.handle_key_event(KeyEvent::new(
+                KeyCode::Char(*letter_key),
+                event::KeyModifiers::NONE,
+            ));
             assert_eq!(app.ui.current_card, 1);
         }
     }
@@ -526,18 +529,18 @@ mod tests {
     #[test]
     fn test_exit_behavior() {
         let mut app = create_test_app();
-        
+
         // Test normal exit
         app.handle_key_event(KeyEvent::new(KeyCode::Char('q'), event::KeyModifiers::NONE));
         assert!(app.ui.exit);
-        
+
         // Test exit with help screen open
         let mut app = create_test_app();
         app.ui.help = true;
         app.handle_key_event(KeyEvent::new(KeyCode::Char('q'), event::KeyModifiers::NONE));
         assert!(!app.ui.exit); // Should close help first
         assert!(!app.ui.help);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('q'), event::KeyModifiers::NONE));
         assert!(app.ui.exit); // Now should exit
     }
@@ -546,7 +549,7 @@ mod tests {
     fn test_max_duration() {
         let mut app = create_test_app();
         app.max_duration = 0; // Set to 0 to test immediate timeout
-        
+
         // Simulate event poll after duration
         if let Ok(true) = event::poll(Duration::from_secs(1)) {
             app.handle_events().unwrap();
@@ -557,14 +560,14 @@ mod tests {
     #[test]
     fn test_card_state_updates() {
         let mut app = create_test_app();
-        
+
         // Test that card state is properly updated
         app.update_state(Quality::Perfect);
         let card = &app.cards[0];
         assert!(card.last_revised.is_some());
         assert_eq!(card.revise_count, 1);
         assert!(!card.leech);
-        
+
         // Test failed count increment
         let mut app = create_test_app();
         app.update_state(Quality::IncorrectAndForgotten);
@@ -576,11 +579,11 @@ mod tests {
     fn test_reverse_probability() {
         let mut app = create_test_app();
         app.reverse_probability = 1.0; // Always reverse
-        
+
         // Should still work with reversed cards
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
         assert_eq!(app.ui.current_card, 1);
@@ -589,14 +592,14 @@ mod tests {
     #[test]
     fn test_card_reveal_state() {
         let mut app = create_test_app();
-        
+
         // Initially card should not be revealed
         assert!(!app.ui.revealed);
-        
+
         // Space should reveal card
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         // Quality input should hide card again
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
@@ -606,11 +609,11 @@ mod tests {
     fn test_invalid_quality_inputs() {
         let mut app = create_test_app();
         let initial_card = app.ui.current_card;
-        
+
         // Invalid quality inputs should be ignored
         app.handle_key_event(KeyEvent::new(KeyCode::Char('6'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, initial_card);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('x'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, initial_card);
     }
@@ -618,13 +621,13 @@ mod tests {
     #[test]
     fn test_global_state_updates() {
         let mut app = create_test_app();
-        
+
         // First refresh the global state
         refresh_global_state(&mut app.global_state);
-        
+
         // Process a card with perfect quality
         app.update_state(Quality::Perfect);
-        
+
         // Check global state updates
         assert!(app.global_state.last_revise_session.is_some());
         assert!(app.global_state.mean_q.is_some());
@@ -634,14 +637,14 @@ mod tests {
     #[test]
     fn test_leech_card_handling() {
         let mut app = create_test_app();
-        
+
         // Make the card a leech
         app.cards[0].leech = true;
-        
+
         // Should still be able to review leech cards
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
         assert_eq!(app.ui.current_card, 1);
@@ -650,14 +653,14 @@ mod tests {
     #[test]
     fn test_orphan_card_handling() {
         let mut app = create_test_app();
-        
+
         // Make the card an orphan
         app.cards[0].orphan = true;
-        
+
         // Should still be able to review orphan cards
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed);
     }
@@ -665,30 +668,30 @@ mod tests {
     #[test]
     fn test_tag_filtering() {
         let mut app = create_test_app();
-        
+
         // Add a card with a tag
         app.cards[0].card.tags.insert("test_tag".to_string());
-        
+
         // Set tag filter
         app.tags = vec!["test_tag".to_string()];
-        
+
         // Should still be able to review cards with matching tags
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
-        
+
         // Add a card without the tag
         let mut untagged_card = app.cards[0].clone();
         untagged_card.card.tags.clear();
         app.cards.push(untagged_card);
-        
+
         // Process first card
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 1);
-        
+
         // Process second card
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 2); // Will be at end of cards
-        
+
         // One more update should trigger exit
         app.update_state(Quality::Perfect);
         assert!(app.ui.exit);
@@ -702,7 +705,7 @@ mod tests {
             "line 2".to_string(),
             "line 3".to_string(),
         ];
-        
+
         // Should handle multi-line responses
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
@@ -711,17 +714,17 @@ mod tests {
     #[test]
     fn test_consecutive_failures() {
         let mut app = create_test_app();
-        
+
         // Test that consecutive failures are tracked
         for _ in 0..2 {
             app.ui.current_card = 0; // Reset position
             app.update_state(Quality::IncorrectAndForgotten);
         }
-        
+
         let card = &app.cards[0];
         assert_eq!(card.state.failed_count, 2);
         assert!(!card.leech); // Should not be leech yet
-        
+
         // One more failure should make it a leech
         app.ui.current_card = 0;
         app.update_state(Quality::IncorrectAndForgotten);
@@ -731,18 +734,18 @@ mod tests {
     #[test]
     fn test_state_persistence() {
         let mut app = create_test_app();
-        
+
         // First refresh the global state
         refresh_global_state(&mut app.global_state);
-        
+
         // Process a card
         app.update_state(Quality::Perfect);
-        
+
         // Verify that the update_fn was called with correct state
         let card = &app.cards[0];
         assert_eq!(card.revise_count, 1);
         assert!(card.last_revised.is_some());
-        
+
         // Global state should also be updated
         assert!(app.global_state.last_revise_session.is_some());
     }
@@ -756,11 +759,11 @@ mod tests {
             (KeyCode::Char('?'), "help"),
             // Add more shortcuts as needed
         ];
-        
+
         for (key, action) in shortcuts.iter() {
             let mut app = create_test_app();
             app.handle_key_event(KeyEvent::new(*key, event::KeyModifiers::NONE));
-            
+
             match *action {
                 "reveal" => assert!(app.ui.revealed),
                 "quit" => assert!(app.ui.exit),
@@ -773,12 +776,12 @@ mod tests {
     #[test]
     fn test_card_state_reset() {
         let mut app = create_test_app();
-        
+
         // Process card with failure
         app.update_state(Quality::IncorrectAndForgotten);
         let card = &app.cards[0];
         assert_eq!(card.state.failed_count, 1);
-        
+
         // Process same card with success
         app.ui.current_card = 0;
         app.update_state(Quality::Perfect);
@@ -791,7 +794,7 @@ mod tests {
     fn test_empty_response() {
         let mut app = create_test_app();
         app.cards[0].card.response = vec![];
-        
+
         // Should handle empty response gracefully
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
@@ -802,7 +805,7 @@ mod tests {
         let mut app = create_test_app();
         app.cards[0].card.tags.insert("tag1".to_string());
         app.cards[0].card.tags.insert("tag2".to_string());
-        
+
         // Should handle multiple tags
         app.tags = vec!["tag1".to_string()];
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
@@ -813,15 +816,15 @@ mod tests {
     fn test_algorithm_updates() {
         let mut app = create_test_app();
         let initial_interval = app.cards[0].state.interval;
-        
+
         // Perfect response should increase interval
         app.update_state(Quality::Perfect);
         assert!(app.cards[0].state.interval >= initial_interval);
-        
+
         // Reset card state
         app = create_test_app();
         let initial_interval = app.cards[0].state.interval;
-        
+
         // Failed response should reset or decrease interval
         app.update_state(Quality::IncorrectAndForgotten);
         assert!(app.cards[0].state.interval <= initial_interval);
@@ -831,11 +834,11 @@ mod tests {
     fn test_review_timestamps() {
         let mut app = create_test_app();
         assert!(app.cards[0].last_revised.is_none());
-        
+
         let before_review = chrono::Utc::now();
         app.update_state(Quality::Perfect);
         let after_review = chrono::Utc::now();
-        
+
         let review_time = app.cards[0].last_revised.unwrap();
         assert!(review_time >= before_review && review_time <= after_review);
     }
@@ -844,30 +847,30 @@ mod tests {
     fn test_consecutive_perfect_scores() {
         let mut app = create_test_app();
         let initial_interval = app.cards[0].state.interval;
-        
+
         // Multiple perfect scores should increase interval more
         for _ in 0..3 {
             app.ui.current_card = 0;
             app.update_state(Quality::Perfect);
         }
-        
+
         assert!(app.cards[0].state.interval > initial_interval * 2);
     }
 
     #[test]
     fn test_keyboard_modifiers() {
         let mut app = create_test_app();
-        
+
         // Modifiers should be ignored
         app.handle_key_event(KeyEvent::new(
             KeyCode::Char(' '),
-            event::KeyModifiers::SHIFT
+            event::KeyModifiers::SHIFT,
         ));
         assert!(app.ui.revealed);
-        
+
         app.handle_key_event(KeyEvent::new(
             KeyCode::Char('q'),
-            event::KeyModifiers::CONTROL
+            event::KeyModifiers::CONTROL,
         ));
         assert!(app.ui.exit);
     }
@@ -876,17 +879,17 @@ mod tests {
     fn test_mean_quality_updates() {
         let mut app = create_test_app();
         refresh_global_state(&mut app.global_state);
-        
+
         // Perfect score
         app.update_state(Quality::Perfect);
         let perfect_mean = app.global_state.mean_q.unwrap();
-        
+
         // Reset and test with lower score
         let mut app = create_test_app();
         refresh_global_state(&mut app.global_state);
         app.update_state(Quality::IncorrectButRemembered);
         let lower_mean = app.global_state.mean_q.unwrap();
-        
+
         assert!(perfect_mean > lower_mean);
     }
 
@@ -895,7 +898,7 @@ mod tests {
         let mut app = create_test_app();
         let second_card = app.cards[0].clone();
         app.cards.push(second_card);
-        
+
         // Cards should be reviewed in order
         assert_eq!(app.ui.current_card, 0);
         app.update_state(Quality::Perfect);
@@ -907,14 +910,14 @@ mod tests {
     #[test]
     fn test_boundary_conditions() {
         let mut app = create_test_app();
-        
+
         // Test with very large intervals
         app.cards[0].state.interval = u64::MAX / 2;
         app.update_state(Quality::Perfect);
         assert!(app.cards[0].state.interval < u64::MAX);
 
         app.ui.current_card = 0;
-        
+
         // Test with very small intervals
         app.cards[0].state.interval = u64::MIN;
         app.update_state(Quality::IncorrectAndForgotten);
@@ -924,21 +927,21 @@ mod tests {
     #[test]
     fn test_help_screen_interaction() {
         let mut app = create_test_app();
-        
+
         // Help screen should block card interactions
         app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), event::KeyModifiers::NONE));
         assert!(app.ui.help);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(!app.ui.revealed); // Should not reveal card while help is shown
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 0); // Should not progress while help is shown
-        
+
         // Close help and verify interactions work again
         app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), event::KeyModifiers::NONE));
         assert!(!app.ui.help);
-        
+
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
     }
