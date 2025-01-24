@@ -258,4 +258,68 @@ mod tests {
             assert!(state.ease_factor >= previous_ef);
         }
     }
+
+    #[test]
+    fn test_new_optimal_factor() {
+        // Test with different quality levels
+        let of = 4.0;
+        assert!(new_optimal_factor(of, &Quality::Perfect) > of);
+        assert_eq!(new_optimal_factor(of, &Quality::CorrectWithHesitation), of);
+        assert!(new_optimal_factor(of, &Quality::IncorrectAndForgotten) < of);
+
+        // Test with different initial optimal factors
+        assert!(new_optimal_factor(2.0, &Quality::Perfect) > 2.0);
+        assert!(new_optimal_factor(6.0, &Quality::Perfect) > 6.0);
+    }
+
+    #[test]
+    fn test_update_optimal_factor_matrix() {
+        let mut of_matrix = OptimalFactorMatrix::new();
+        
+        // Test inserting new value
+        update_optimal_factor_matrix(0, 2.5, 4.0, &mut of_matrix);
+        assert_eq!(get_optimal_factor(0, 2.5, &of_matrix), 4.0);
+
+        // Test updating existing value
+        update_optimal_factor_matrix(0, 2.5, 4.5, &mut of_matrix);
+        assert_eq!(get_optimal_factor(0, 2.5, &of_matrix), 4.5);
+
+        // Test multiple repetition levels
+        update_optimal_factor_matrix(1, 2.6, 3.0, &mut of_matrix);
+        assert_eq!(get_optimal_factor(1, 2.6, &of_matrix), 3.0);
+        assert_eq!(get_optimal_factor(0, 2.5, &of_matrix), 4.5); // Previous value unchanged
+    }
+
+    #[test]
+    fn test_repetition_interval_calculation() {
+        let mut of_matrix = OptimalFactorMatrix::new();
+        update_optimal_factor_matrix(0, 2.5, 4.0, &mut of_matrix);
+
+        // Test first repetition
+        assert_eq!(repetition_interval(0, 0, 2.5, &of_matrix), 4);
+
+        // Test subsequent repetitions
+        assert_eq!(repetition_interval(4, 1, 2.5, &of_matrix), 10);
+
+        // Test with custom optimal factor
+        update_optimal_factor_matrix(1, 2.5, 3.0, &mut of_matrix);
+        assert_eq!(repetition_interval(10, 1, 2.5, &of_matrix), 30);
+    }
+
+    #[test]
+    fn test_failed_count_tracking() {
+        let mut state = CardState::default();
+        let mut global = GlobalState::default();
+        let sm5 = Sm5 {};
+
+        // Test failed count increases
+        state.failed_count = 0;
+        sm5.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.failed_count, 0); // Failed count should remain unchanged
+
+        // Test failed count with mixed success/failure
+        sm5.update_state(&Quality::Perfect, &mut state, &mut global);
+        sm5.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.failed_count, 0); // Failed count should remain unchanged
+    }
 }

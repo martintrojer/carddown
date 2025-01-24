@@ -108,4 +108,68 @@ mod tests {
         assert_eq!(state.interval, 0);
         assert_eq!(state.repetitions, 0);
     }
+
+    #[test]
+    fn test_first_interval() {
+        // Test with no failures
+        assert_eq!(first_interval(0).round(), 2.0);
+
+        // Test with increasing failures
+        assert!(first_interval(1) < first_interval(0));
+        assert!(first_interval(5) < first_interval(1));
+        assert!(first_interval(10) < first_interval(5));
+
+        // Test that interval never goes below 0
+        assert!(first_interval(100) > 0.0);
+    }
+
+    #[test]
+    fn test_interval_factor() {
+        // Test with different ease values
+        assert!(interval_factor(2.0, 1) > 1.2);
+        assert!(interval_factor(3.0, 1) > interval_factor(2.0, 1));
+
+        // Test with increasing repetitions
+        let ease = 2.5;
+        let factor1 = interval_factor(ease, 1);
+        let factor2 = interval_factor(ease, 2);
+        let factor3 = interval_factor(ease, 3);
+        assert!(factor2 < factor1); // Factor should decrease with more repetitions
+        assert!(factor3 < factor2);
+    }
+
+    #[test]
+    fn test_quality_to_ease() {
+        // Test boundary values
+        assert!(quality_to_ease(0.0) > 1.0);
+        assert!(quality_to_ease(5.0) > quality_to_ease(0.0));
+
+        // Test monotonic increase
+        let e1 = quality_to_ease(1.0);
+        let e2 = quality_to_ease(2.0);
+        let e3 = quality_to_ease(3.0);
+        let e4 = quality_to_ease(4.0);
+        assert!(e2 > e1);
+        assert!(e3 > e2);
+        assert!(e4 > e3);
+    }
+
+    #[test]
+    fn test_global_state_interaction() {
+        let mut state = CardState::default();
+        let mut global = GlobalState::default();
+        let simple8 = Simple8 {};
+
+        // Test with no mean_q set
+        simple8.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert!(state.interval > 0);
+
+        // Test with mean_q set
+        update_meanq(&mut global, Quality::CorrectWithDifficulty);
+        state = CardState::default();
+        state.repetitions = 1;
+        state.interval = 10;
+        simple8.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert!(state.interval > 10);
+    }
 }
