@@ -11,8 +11,9 @@ lazy_static! {
     static ref CARD_RE: Regex = Regex::new(r"#flashcard|🧠").unwrap();
     static ref ONE_LINE_CARD_RE: Regex = Regex::new(r"^(.*):(.*)").unwrap();
     static ref MULTI_LINE_CARD_RE: Regex = Regex::new(r"#flashcard").unwrap();
-    static ref TAG_RE: Regex = Regex::new(r"(#\w+)*").unwrap();
-    static ref END_OF_CARD_RE: Regex = Regex::new(r"^(\-\-\-|\- \- \-|\*\*\*|\* \* \*)$").unwrap();
+    static ref TAG_RE: Regex = Regex::new(r"(#[\w-]+)*").unwrap();
+    static ref END_OF_CARD_RE: Regex =
+        Regex::new(r"^(\s*\-\-\-\s*|\s*\-\s*\-\s*\-\s*|\s*\*\*\*\s*|\s*\*\s*\*\s*\*\s*)$").unwrap();
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -38,12 +39,12 @@ fn parse_tags(line: &str) -> HashSet<String> {
 }
 
 fn strip_tags(line: &str) -> Result<String> {
-    Ok(line
+    let s = line
         .split(&['#', '🧠'])
         .next()
         .context("error stripping tags")?
-        .trim()
-        .to_string())
+        .trim();
+    Ok(s.trim().to_string())
 }
 
 #[derive(Debug, Default)]
@@ -421,5 +422,21 @@ Q4: A4 #flashcard";
             assert_eq!(cards[0].prompt, "Q1");
             assert_eq!(cards[1].prompt, "Q2");
         }
+    }
+
+    #[test]
+    fn test_parse_tags_with_hyphens() {
+        let tags = parse_tags("#flashcard #tag-with-hyphen #another-tag");
+        assert_eq!(
+            tags,
+            HashSet::from(["tag-with-hyphen".to_string(), "another-tag".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_strip_tags_whitespace() {
+        let line = "  What is the answer?  #flashcard";
+        let prompt = strip_tags(line).unwrap();
+        assert_eq!(prompt, "What is the answer?");
     }
 }
