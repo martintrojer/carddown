@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_update_optimal_factor_matrix() {
         let mut of_matrix = OptimalFactorMatrix::new();
-        
+
         // Test inserting new value
         update_optimal_factor_matrix(0, 2.5, 4.0, &mut of_matrix);
         assert_eq!(get_optimal_factor(0, 2.5, &of_matrix), 4.0);
