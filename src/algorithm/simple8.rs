@@ -8,6 +8,7 @@ impl Algorithm for Simple8 {
         if quality.failed() {
             state.repetitions = 0;
             state.interval = 0;
+            state.failed_count += 1;
         } else if state.repetitions == 0 || state.interval == 0 {
             state.interval = first_interval(state.failed_count) as u64;
             state.repetitions += 1;
@@ -30,7 +31,9 @@ fn first_interval(total_failures: u64) -> f64 {
 
 fn interval_factor(ease: f64, repetitions: u64) -> f64 {
     let r = repetitions as f64;
-    1.2 + (ease - 1.2) * 0.5_f64.powf(r.log2())
+    // Prevent log2(0) which would return -∞
+    let log_r = if r > 0.0 { r.log2() } else { 0.0 };
+    1.2 + (ease - 1.2) * 0.5_f64.powf(log_r)
 }
 
 fn quality_to_ease(q: f64) -> f64 {
@@ -136,6 +139,11 @@ mod tests {
         let factor3 = interval_factor(ease, 3);
         assert!(factor2 < factor1); // Factor should decrease with more repetitions
         assert!(factor3 < factor2);
+
+        // Test edge case: repetitions = 0 (should not panic)
+        let factor_zero = interval_factor(2.0, 0);
+        assert!(factor_zero.is_finite());
+        assert_eq!(factor_zero, 2.0); // When log_r = 0, 0.5^0 = 1, so factor = 1.2 + (ease - 1.2) * 1 = ease
     }
 
     #[test]
