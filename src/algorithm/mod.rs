@@ -44,7 +44,7 @@ pub type OptimalFactorMatrix = HashMap<u64, HashMap<OrderedFloat<f64>, f64>>;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
-    ease_factor: f64,
+    pub ease_factor: f64,
     // An integer number indicating the number of days to wait before the next review
     pub interval: u64,
     // The number of times the information has been reviewed prior to this review

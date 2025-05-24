@@ -85,7 +85,13 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if state_path.exists() {
         let data = fs::read_to_string(state_path)
             .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        serde_json::from_str(&data).context("Failed to deserialize global state")
+        match serde_json::from_str(&data) {
+            Ok(state) => Ok(state),
+            Err(_) => {
+                log::warn!("Global state corrupted, creating a new one");
+                Ok(GlobalState::default())
+            }
+        }
     } else {
         log::info!("No global state found, using default");
         Ok(GlobalState::default())
@@ -523,5 +529,138 @@ mod tests {
         atomic_write(file_path, "").unwrap();
         let read_content = fs::read_to_string(file_path).unwrap();
         assert_eq!(read_content, "");
+    }
+
+    #[test]
+    fn test_corrupted_db_file() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+
+        // Write invalid JSON
+        fs::write(file_path, "invalid json content {").unwrap();
+
+        // Should handle corrupted file gracefully
+        let result = get_db(file_path);
+        assert!(result.is_err());
+
+        // Test with empty file
+        fs::write(file_path, "").unwrap();
+        let result = get_db(file_path);
+        assert!(result.is_ok());
+        let db = result.unwrap();
+        assert!(db.is_empty());
+
+        // Test with partial JSON
+        fs::write(file_path, "[{\"card\":{\"id\":[1,2,3").unwrap();
+        let result = get_db(file_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_corrupted_global_state_file() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+
+        // Write invalid JSON
+        fs::write(file_path, "not json at all").unwrap();
+
+        // Should handle corrupted state file gracefully by creating default
+        let result = get_global_state(file_path);
+        assert!(result.is_ok());
+        let state = result.unwrap();
+        assert_eq!(state, GlobalState::default());
+
+        // Test with partial JSON
+        fs::write(file_path, "{\"mean_q\":").unwrap();
+        let result = get_global_state(file_path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extreme_interval_values() {
+        use crate::algorithm::{new_algorithm, Algo, Quality};
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+
+        // Create card with extreme interval
+        let card = Card {
+            id: blake3::hash(b"test_extreme"),
+            file: std::path::PathBuf::from("test.md"),
+            line: 1,
+            prompt: "test".to_string(),
+            response: vec!["test".to_string()],
+            tags: std::collections::HashSet::new(),
+        };
+
+        let mut entry = CardEntry::new(card);
+        entry.state.interval = u64::MAX - 1000;
+        entry.state.ease_factor = 10.0; // Very high ease factor
+
+        let mut db = CardDb::new();
+        db.insert(entry.card.id, entry);
+
+        // Test that write/read works with extreme values
+        write_db(file_path, &db).unwrap();
+        let loaded_db = get_db(file_path).unwrap();
+
+        let loaded_entry = loaded_db.get(&blake3::hash(b"test_extreme")).unwrap();
+        assert_eq!(loaded_entry.state.interval, u64::MAX - 1000);
+        assert_eq!(loaded_entry.state.ease_factor, 10.0);
+
+        // Test algorithm with extreme values doesn't panic
+        let algorithm = new_algorithm(Algo::SM2);
+        let mut state = loaded_entry.state.clone();
+        let mut global_state = GlobalState::default();
+
+        algorithm.update_state(&Quality::Perfect, &mut state, &mut global_state);
+        assert!(state.interval > 0);
+    }
+
+    #[test]
+    fn test_concurrent_database_access() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = Arc::new(temp_file.path().to_path_buf());
+
+        // Initialize with empty database
+        write_db(&file_path, &CardDb::new()).unwrap();
+
+        let barrier = Arc::new(Barrier::new(4));
+        let mut handles = vec![];
+
+        // Spawn multiple threads that try to read/write simultaneously
+        for _ in 0..4 {
+            let file_path = file_path.clone();
+            let barrier = barrier.clone();
+
+            let handle = thread::spawn(move || {
+                barrier.wait();
+
+                // Each thread tries to read and then write
+                let result1 = get_db(&file_path);
+                let result2 = write_db(&file_path, &CardDb::new());
+
+                (result1.is_ok(), result2.is_ok())
+            });
+
+            handles.push(handle);
+        }
+
+        // Collect results - at least some operations should succeed
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let successful_reads = results.iter().filter(|(read, _)| *read).count();
+        let successful_writes = results.iter().filter(|(_, write)| *write).count();
+
+        assert_eq!(successful_reads, 4);
+        assert!(successful_writes > 0);
     }
 }
