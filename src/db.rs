@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
+    io::Write,
     path::Path,
 };
 
@@ -11,6 +12,39 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// Atomically write content to a file using temp file + rename
+fn atomic_write(path: &Path, content: &str) -> Result<()> {
+    let temp_path = path.with_extension("tmp");
+
+    // Clean up any stale temp file
+    let _ = fs::remove_file(&temp_path);
+
+    // Write to temporary file first
+    let mut temp_file = fs::File::create(&temp_path)
+        .with_context(|| format!("Failed to create temp file: {}", temp_path.display()))?;
+
+    temp_file
+        .write_all(content.as_bytes())
+        .with_context(|| format!("Failed to write to temp file: {}", temp_path.display()))?;
+
+    temp_file
+        .sync_all()
+        .with_context(|| format!("Failed to sync temp file: {}", temp_path.display()))?;
+
+    // Atomically replace the original file
+    fs::rename(&temp_path, path).with_context(|| {
+        format!(
+            "Failed to rename {} to {}",
+            temp_path.display(),
+            path.display()
+        )
+    })?;
+
+    drop(temp_file);
+
+    Ok(())
+}
 // Clone for tests
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardEntry {
@@ -72,11 +106,9 @@ pub fn refresh_global_state(state: &mut GlobalState) {
 }
 
 pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> {
-    fs::write(
-        state_path,
-        serde_json::to_string(state).context("Failed to serialize global state")?,
-    )
-    .with_context(|| format!("Error writing to `{}`", state_path.display()))
+    let json_content = serde_json::to_string(state).context("Failed to serialize global state")?;
+    atomic_write(state_path, &json_content)
+        .with_context(|| format!("Error writing to `{}`", state_path.display()))
 }
 
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
@@ -101,11 +133,9 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
 
 fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     let data = db.values().collect::<Vec<_>>();
-    fs::write(
-        db_path,
-        serde_json::to_string(&data).context("Error serializing db")?,
-    )
-    .with_context(|| format!("Error writing to `{}`", db_path.display()))
+    let json_content = serde_json::to_string(&data).context("Error serializing db")?;
+    atomic_write(db_path, &json_content)
+        .with_context(|| format!("Error writing to `{}`", db_path.display()))
 }
 
 pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
@@ -462,5 +492,36 @@ mod tests {
         state.last_revise_session = Some(Utc::now() + chrono::Duration::days(1));
         refresh_global_state(&mut state);
         assert!(state.last_revise_session.unwrap() <= Utc::now());
+    }
+
+    #[test]
+    fn test_atomic_write() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+
+        // Test successful atomic write
+        let content = "test content";
+        atomic_write(file_path, content).unwrap();
+
+        let read_content = fs::read_to_string(file_path).unwrap();
+        assert_eq!(read_content, content);
+
+        // Test that temp file is cleaned up
+        let temp_path = file_path.with_extension("tmp");
+        assert!(!temp_path.exists());
+
+        // Test overwriting existing file
+        let new_content = "new test content";
+        atomic_write(file_path, new_content).unwrap();
+
+        let read_content = fs::read_to_string(file_path).unwrap();
+        assert_eq!(read_content, new_content);
+
+        // Test with empty content
+        atomic_write(file_path, "").unwrap();
+        let read_content = fs::read_to_string(file_path).unwrap();
+        assert_eq!(read_content, "");
     }
 }

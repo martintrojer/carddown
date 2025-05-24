@@ -30,7 +30,7 @@ impl LockGuard {
         std::fs::File::create(&**LOCK_FILE_PATH)?;
         Ok(LockGuard)
     }
-    
+
     fn force_new() -> Result<Self> {
         // Remove existing lock file if it exists
         let _ = std::fs::remove_file(&**LOCK_FILE_PATH);
@@ -163,7 +163,8 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
-            e.path().extension()
+            e.path()
+                .extension()
                 .and_then(|ext| ext.to_str())
                 .map_or(false, |ext| file_types.contains(ext))
         })
@@ -207,7 +208,7 @@ fn main() -> Result<()> {
     if !PathBuf::from(&**DB_PATH).exists() {
         std::fs::create_dir_all(&**DB_PATH)?;
     }
-    
+
     // Acquire lock file with proper RAII cleanup
     let _lock_guard = if args.force {
         LockGuard::force_new()?
