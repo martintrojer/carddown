@@ -76,8 +76,15 @@ impl App {
                         // Make no sense to delete a leech card
                         self.cards.push(card);
                     } else {
-                        (self.delete_fn)(card.card.id).unwrap();
-                        self.current_card = std::cmp::min(self.cards.len(), self.current_card);
+                        if let Err(_) = (self.delete_fn)(card.card.id) {
+                            // If deletion fails, put the card back
+                            self.cards.insert(self.current_card, card);
+                        } else {
+                            // After successful deletion, ensure current_card is valid
+                            if self.current_card >= self.cards.len() && !self.cards.is_empty() {
+                                self.current_card = self.cards.len() - 1;
+                            }
+                        }
                         self.sure = false;
                     }
                 }
@@ -163,8 +170,7 @@ impl App {
 
         let counter_text = if self.cards.is_empty() || self.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to audit".into()])])
-        } else {
-            let card = self.cards.get(self.current_card).unwrap();
+        } else if let Some(card) = self.cards.get(self.current_card) {
             let mut lines: Vec<Line> = vec![];
             lines.push(if card.orphan {
                 Line::from(vec!["Orphan".yellow().bold()])
@@ -218,6 +224,8 @@ impl App {
                 card.card.line.to_string().into(),
             ]));
             Text::from(lines)
+        } else {
+            Text::from(vec![Line::from(vec!["No cards to audit".into()])])
         };
 
         (block, counter_text)

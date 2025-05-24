@@ -23,7 +23,10 @@ lazy_static! {
     static ref DB_PATH: String = format!(
         "{}/carddown",
         std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap();
+            let home = std::env::var("HOME").unwrap_or_else(|_| {
+                // Fallback to temp directory if HOME is not set
+                std::env::temp_dir().to_string_lossy().to_string()
+            });
             format!("{}/.local/state", home)
         })
     );
