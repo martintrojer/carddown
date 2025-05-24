@@ -80,7 +80,7 @@ fn repetition_interval(
     } else {
         last_interval as f64 * optimal_factor
     };
-    res.round() as u64
+    super::safe_f64_to_u64(res.round())
 }
 
 #[cfg(test)]

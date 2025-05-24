@@ -18,7 +18,8 @@ impl Algorithm for Sm2 {
                     state.interval = 6;
                 }
                 _ => {
-                    state.interval = (state.interval as f64 * state.ease_factor).round() as u64;
+                    let new_interval = state.interval as f64 * state.ease_factor;
+                    state.interval = super::safe_f64_to_u64(new_interval.round());
                 }
             }
             state.repetitions += 1;

@@ -10,12 +10,13 @@ impl Algorithm for Simple8 {
             state.interval = 0;
             state.failed_count += 1;
         } else if state.repetitions == 0 || state.interval == 0 {
-            state.interval = first_interval(state.failed_count) as u64;
+            state.interval = super::safe_f64_to_u64(first_interval(state.failed_count));
             state.repetitions += 1;
         } else {
             let q = global.mean_q.unwrap_or((*quality as usize) as f64);
             let factor = interval_factor(quality_to_ease(q), state.repetitions);
-            state.interval = (state.interval as f64 * factor).round() as u64;
+            let new_interval = state.interval as f64 * factor;
+            state.interval = super::safe_f64_to_u64(new_interval.round());
             state.repetitions += 1;
         }
     }

@@ -99,6 +99,17 @@ fn round_float(f: f64, fix: usize) -> f64 {
     (f * factor).round() / factor
 }
 
+/// Safely convert f64 to u64 with overflow protection
+pub(crate) fn safe_f64_to_u64(value: f64) -> u64 {
+    if value.is_nan() || value < 0.0 {
+        0
+    } else if value.is_infinite() || value > u64::MAX as f64 {
+        u64::MAX
+    } else {
+        value as u64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +178,23 @@ mod tests {
             2.50
         );
         assert_eq!(round_float(new_ease_factor(&Quality::Perfect, ef), 2), 2.60);
+    }
+
+    #[test]
+    fn test_safe_f64_to_u64() {
+        // Normal values
+        assert_eq!(safe_f64_to_u64(42.0), 42);
+        assert_eq!(safe_f64_to_u64(42.7), 42);
+        assert_eq!(safe_f64_to_u64(0.0), 0);
+        
+        // Edge cases
+        assert_eq!(safe_f64_to_u64(-1.0), 0); // Negative
+        assert_eq!(safe_f64_to_u64(f64::NAN), 0); // NaN
+        assert_eq!(safe_f64_to_u64(f64::INFINITY), u64::MAX); // Infinity
+        assert_eq!(safe_f64_to_u64(f64::NEG_INFINITY), 0); // Negative infinity
+        
+        // Overflow protection
+        let huge_value = u64::MAX as f64 + 1e10;
+        assert_eq!(safe_f64_to_u64(huge_value), u64::MAX);
     }
 }
