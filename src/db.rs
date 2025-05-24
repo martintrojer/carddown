@@ -139,8 +139,8 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
     }
 
     let mut found_card_db: CardDb = found_cards
-        .iter()
-        .map(|card| (card.id, CardEntry::new(card.clone())))
+        .into_iter()
+        .map(|card| (card.id, CardEntry::new(card)))
         .collect();
     let found_ids: HashSet<_> = found_card_db.keys().cloned().collect();
 

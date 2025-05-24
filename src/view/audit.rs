@@ -193,7 +193,7 @@ impl App {
                 .card
                 .tags
                 .iter()
-                .cloned()
+                .map(|s| s.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
                 .into()]));

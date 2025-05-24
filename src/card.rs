@@ -31,7 +31,7 @@ fn parse_tags(line: &str) -> HashSet<String> {
         .find_iter(line)
         .map(|m| m.as_str())
         .filter(|s| !s.is_empty())
-        .map(|s| s[1..s.len()].to_owned())
+        .filter_map(|s| s.strip_prefix('#').map(str::to_owned))
         .filter(|s| !s.is_empty())
         .collect();
     tags.remove("flashcard");

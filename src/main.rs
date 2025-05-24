@@ -49,11 +49,9 @@ lazy_static! {
     static ref DB_PATH: String = format!(
         "{}/carddown",
         std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| {
-                // Fallback to temp directory if HOME is not set
-                std::env::temp_dir().to_string_lossy().to_string()
-            });
-            format!("{}/.local/state", home)
+            std::env::var("HOME")
+                .map(|home| format!("{}/.local/state", home))
+                .unwrap_or_else(|_| format!("{}/.local/state", std::env::temp_dir().display()))
         })
     );
     static ref DB_FILE_PATH: String = format!("{}/cards.json", *DB_PATH);
@@ -162,18 +160,16 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
     let file_types: HashSet<&str> = HashSet::from_iter(file_types.iter().map(|s| s.as_str()));
     WalkDir::new(folder)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
-            if let Some(ft) = e.path().extension() {
-                file_types.contains(ft.to_string_lossy().as_ref())
-            } else {
-                false
-            }
+            e.path().extension()
+                .and_then(|ext| ext.to_str())
+                .map_or(false, |ext| file_types.contains(ext))
         })
-        .map(|e| card::parse_file(&PathBuf::from(e.path())))
-        .collect::<Result<Vec<Vec<Card>>>>()
-        .map(|xs| xs.into_iter().flatten().collect())
+        .map(|e| card::parse_file(e.path()))
+        .collect::<Result<Vec<_>>>()
+        .map(|vecs| vecs.into_iter().flatten().collect())
 }
 
 fn filter_cards(
@@ -265,7 +261,7 @@ fn main() -> Result<()> {
             let db = db::get_db(&args.db)?;
             let mut state = db::get_global_state(&args.state)?;
             db::refresh_global_state(&mut state);
-            let tags_set: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
+            let tags_set: HashSet<String> = tags.iter().cloned().collect();
             let mut cards = filter_cards(
                 db,
                 tags_set,
