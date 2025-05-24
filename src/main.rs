@@ -19,6 +19,32 @@ use walkdir::WalkDir;
 #[macro_use]
 extern crate lazy_static;
 
+/// RAII guard for lock file management
+struct LockGuard;
+
+impl LockGuard {
+    fn new() -> Result<Self> {
+        if PathBuf::from(&**LOCK_FILE_PATH).exists() {
+            anyhow::bail!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
+        }
+        std::fs::File::create(&**LOCK_FILE_PATH)?;
+        Ok(LockGuard)
+    }
+    
+    fn force_new() -> Result<Self> {
+        // Remove existing lock file if it exists
+        let _ = std::fs::remove_file(&**LOCK_FILE_PATH);
+        std::fs::File::create(&**LOCK_FILE_PATH)?;
+        Ok(LockGuard)
+    }
+}
+
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&**LOCK_FILE_PATH);
+    }
+}
+
 lazy_static! {
     static ref DB_PATH: String = format!(
         "{}/carddown",
@@ -185,11 +211,19 @@ fn main() -> Result<()> {
     if !PathBuf::from(&**DB_PATH).exists() {
         std::fs::create_dir_all(&**DB_PATH)?;
     }
-    if !args.force && PathBuf::from(&**LOCK_FILE_PATH).exists() {
-        log::error!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
-        std::process::exit(1);
-    }
-    std::fs::File::create(&**LOCK_FILE_PATH)?;
+    
+    // Acquire lock file with proper RAII cleanup
+    let _lock_guard = if args.force {
+        LockGuard::force_new()?
+    } else {
+        match LockGuard::new() {
+            Ok(guard) => guard,
+            Err(_) => {
+                log::error!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
+                std::process::exit(1);
+            }
+        }
+    };
 
     match args.command {
         Commands::Scan {
@@ -266,7 +300,7 @@ fn main() -> Result<()> {
         }
     }
 
-    std::fs::remove_file(&**LOCK_FILE_PATH)?;
+    // Lock file will be automatically cleaned up when _lock_guard goes out of scope
     Ok(())
 }
 
