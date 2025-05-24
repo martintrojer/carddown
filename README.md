@@ -6,16 +6,16 @@ CARDDOWN is a simple cli tool to keep track of (and study) flashcards in text fi
 
 ## Features
 
-  - Scans your notes for flashcards with facts that you want to remember.
-  - Keeps track of flashcards by hash of its contents, thus supporting files being edited and cards moved around.
-  - Extracted cards and meta-data are stored in a separate folder, the original files are never modified.
-  - Supports tags, enabling specific study sessions.
+- Scans your notes for flashcards with facts that you want to remember.
+- Keeps track of flashcards by hash of its contents, thus supporting files being edited and cards moved around.
+- Extracted cards and meta-data are stored in a separate folder, the original files are never modified.
+- Supports tags, enabling specific study sessions.
   - Supports multiple [spaced-repetition](https://en.wikipedia.org/wiki/Spaced_repetition) algorithms.
   - No dependencies, fast, human-readable non-binary formats.
 
 ## Installation
 
-```
+```bash
 cargo install carddown
 ```
 
@@ -30,6 +30,7 @@ CARDDOWN has 3 commands:
 Audit and Revise mode use a terminal UI, with help prompts to describe key bindings.
 
 ### Revise
+
 When you launch a revise session, you will be presented with all flashcards that are due to be revised.
 
 The main flow for each card is as follows:
@@ -53,7 +54,7 @@ Qualities of 0, 1 and 2 are considered a failure and will reset the card to the 
 
 The following flags are used to configure the revise session:
 
-```
+```bash
 Start a flashcard review session
 
 Usage: carddown revise [OPTIONS]
@@ -82,9 +83,10 @@ Options:
 ```
 
 ### Scan
+
 You can scan your source files as many times as you want. CARDDOWN will keep track of the cards you have already scanned and update them if you moved them around. A card will keep all its meta-data as long as the prompt/response or tags haven't changed.
 
-```
+```bash
 Arguments:
   <PATH>  Path to file or folder to scan
 
@@ -96,9 +98,11 @@ Options:
 If `--full` flag is not set (default), CARDDOWN will do an incremental scan which will not generate orphan cards.
 
 ### Audit
+
 In audit mode, you can review your orphan and leech cards. Orphan cards can be removed from the CARDDOWN database in the audit view, but leeches have to be fixed in the source files.
 
 ## Writing flashcards
+
 CARDDOWN supports single and multi-line flashcards. These flashcards can be anywhere in your markdown/text files.
 
 A single-line flashcards has this form:
@@ -112,7 +116,6 @@ Who was the first president of the USA? : George Washington 🧠
 ```
 
 Note that you can use "🧠" or "#flashcard" interchangeably to mark a flashcard.
-
 
 A multi-line flashcard has this form:
 
@@ -137,10 +140,10 @@ See [test.md](tests/test.md) for an example of how to write flashcards.
 
 ## Terminology
 
-  - *Leech*:
+- *Leech*:
     A card that you have failed to remember multiple times. A leech card slows your learning progress
     and should be pruned from your deck, split into multiple cards, or written in a different way.
-  - *Orphan*:
+- *Orphan*:
     A card that doesn't exist in its current form in the source files. This can happen if you
     change or delete a card in the source file. Orphan cards can be pruned by the audit command.
 

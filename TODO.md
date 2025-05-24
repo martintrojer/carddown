@@ -1,11 +1,1 @@
-  - [x] tags not part of card hash
-  - [x] lock file
-  - [x] cram mode
-  - [x] store tags without hash-char
-  - [x] check entire file is valid utf8 when parsing file
-  - [x] @carddown-ignore anywhere in file skips it
-  - [x] reversed revise mode / always / sometimes
-  - [x] Algo in revise footer
-  - [x] Date added in card data
-  - [x] Revise-count in card data
-      - [x] show this extra info in audit view
+# TODO
