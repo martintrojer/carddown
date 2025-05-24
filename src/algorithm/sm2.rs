@@ -9,6 +9,7 @@ impl Algorithm for Sm2 {
         if quality.failed() {
             state.repetitions = 0;
             state.interval = 0;
+            state.failed_count += 1;
         } else {
             match state.repetitions {
                 0 => {
@@ -121,5 +122,25 @@ mod tests {
                 assert!(state.repetitions > 0);
             }
         }
+    }
+
+    #[test]
+    fn test_failed_count_tracking() {
+        let mut state = CardState::default();
+        let mut global = GlobalState::default();
+        let sm2 = Sm2 {};
+
+        // Test failed count increases on failure
+        state.failed_count = 0;
+        sm2.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
+        assert_eq!(state.failed_count, 1); // Failed count should increment
+
+        // Test failed count remains same on success
+        sm2.update_state(&Quality::Perfect, &mut state, &mut global);
+        assert_eq!(state.failed_count, 1); // Failed count should remain unchanged
+
+        // Test another failure increments
+        sm2.update_state(&Quality::IncorrectButRemembered, &mut state, &mut global);
+        assert_eq!(state.failed_count, 2); // Failed count should increment again
     }
 }

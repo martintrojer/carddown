@@ -112,9 +112,6 @@ impl App {
             card.revise_count += 1;
             self.algorithm
                 .update_state(&quality, &mut card.state, &mut self.global_state);
-            if quality.failed() {
-                card.state.failed_count += 1;
-            }
             if card.state.failed_count >= self.leech_threshold as u64 {
                 card.leech = true;
             }

@@ -23,6 +23,7 @@ impl Algorithm for Sm5 {
         if quality.failed() {
             state.repetitions = 0;
             state.interval = 0;
+            state.failed_count += 1;
         } else {
             state.interval = repetition_interval(
                 state.interval,
@@ -312,14 +313,17 @@ mod tests {
         let mut global = GlobalState::default();
         let sm5 = Sm5 {};
 
-        // Test failed count increases
+        // Test failed count increases on failure
         state.failed_count = 0;
         sm5.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
-        assert_eq!(state.failed_count, 0); // Failed count should remain unchanged
+        assert_eq!(state.failed_count, 1); // Failed count should increment
 
-        // Test failed count with mixed success/failure
+        // Test failed count remains same on success
         sm5.update_state(&Quality::Perfect, &mut state, &mut global);
-        sm5.update_state(&Quality::IncorrectAndForgotten, &mut state, &mut global);
-        assert_eq!(state.failed_count, 0); // Failed count should remain unchanged
+        assert_eq!(state.failed_count, 1); // Failed count should remain unchanged
+
+        // Test another failure increments
+        sm5.update_state(&Quality::IncorrectButRemembered, &mut state, &mut global);
+        assert_eq!(state.failed_count, 2); // Failed count should increment again
     }
 }
