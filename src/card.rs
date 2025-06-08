@@ -6,15 +6,13 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref CARD_RE: Regex = Regex::new(r"#flashcard|🧠").unwrap();
-    static ref ONE_LINE_CARD_RE: Regex = Regex::new(r"^(.*):(.*)").unwrap();
-    static ref MULTI_LINE_CARD_RE: Regex = Regex::new(r"#flashcard").unwrap();
-    static ref TAG_RE: Regex = Regex::new(r"(#[\w-]+)*").unwrap();
-    static ref END_OF_CARD_RE: Regex =
-        Regex::new(r"^(\s*\-\-\-\s*|\s*\-\s*\-\s*\-\s*|\s*\*\*\*\s*|\s*\*\s*\*\s*\*\s*)$").unwrap();
-}
+static ONE_LINE_CARD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(.*):(.*)").unwrap());
+static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(#[\w-]+)*").unwrap());
+static END_OF_CARD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(\s*\-\-\-\s*|\s*\-\s*\-\s*\-\s*|\s*\*\*\*\s*|\s*\*\s*\*\s*\*\s*)$").unwrap()
+});
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct Card {
@@ -71,7 +69,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
             state.first_line,
             state.card_lines
         );
-        if CARD_RE.is_match(line) {
+        if line.contains("#flashcard") || line.contains("🧠") {
             if let Some(caps) = ONE_LINE_CARD_RE.captures(line) {
                 log::debug!("caps: {:?}", caps);
                 let prompt = caps
@@ -93,7 +91,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                     tags,
                 });
                 state = ParseState::default();
-            } else if MULTI_LINE_CARD_RE.is_match(line) {
+            } else if line.contains("#flashcard") {
                 let prompt = strip_tags(line)?;
                 if prompt.is_empty() {
                     continue;

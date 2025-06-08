@@ -20,7 +20,6 @@ chrono = { version = "0.4.38", features = ["serde"] }
 clap = { version = "4.5.4", features = ["derive"] }
 crossterm = "0.27.0"
 env_logger = "0.11.3"
-lazy_static = "1.4.0"
 log = "0.4.21"
 ordered-float = { version = "4.2.0", features = ["serde"] }
 rand = "0.8.5"

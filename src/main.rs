@@ -14,50 +14,58 @@ use env_logger::Env;
 use rand::prelude::*;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use walkdir::WalkDir;
 
-#[macro_use]
-extern crate lazy_static;
+use std::sync::LazyLock;
 
 /// RAII guard for lock file management
 struct LockGuard;
 
 impl LockGuard {
     fn new() -> Result<Self> {
-        if PathBuf::from(&**LOCK_FILE_PATH).exists() {
-            anyhow::bail!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
+        // Use atomic create-new operation to prevent race conditions
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&*LOCK_FILE_PATH)
+        {
+            Ok(_) => Ok(LockGuard),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                anyhow::bail!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
+            }
+            Err(e) => Err(e.into()),
         }
-        std::fs::File::create(&**LOCK_FILE_PATH)?;
-        Ok(LockGuard)
     }
 
     fn force_new() -> Result<Self> {
         // Remove existing lock file if it exists
-        let _ = std::fs::remove_file(&**LOCK_FILE_PATH);
-        std::fs::File::create(&**LOCK_FILE_PATH)?;
+        let _ = std::fs::remove_file(&*LOCK_FILE_PATH);
+        std::fs::File::create(&*LOCK_FILE_PATH)?;
         Ok(LockGuard)
     }
 }
 
 impl Drop for LockGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&**LOCK_FILE_PATH);
+        let _ = std::fs::remove_file(&*LOCK_FILE_PATH);
     }
 }
 
-lazy_static! {
-    static ref DB_PATH: String = format!(
+static DB_PATH: LazyLock<String> = LazyLock::new(|| {
+    format!(
         "{}/carddown",
         std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             std::env::var("HOME")
                 .map(|home| format!("{}/.local/state", home))
                 .unwrap_or_else(|_| format!("{}/.local/state", std::env::temp_dir().display()))
         })
-    );
-    static ref DB_FILE_PATH: String = format!("{}/cards.json", *DB_PATH);
-    static ref STATE_FILE_PATH: String = format!("{}/state.json", *DB_PATH);
-    static ref LOCK_FILE_PATH: String = format!("{}/lock", *DB_PATH);
-}
+    )
+});
+static DB_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/cards.json", &*DB_PATH));
+static STATE_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/state.json", &*DB_PATH));
+static LOCK_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/lock", &*DB_PATH));
 
 #[derive(Debug, Clone, ValueEnum)]
 enum LeechMethod {
@@ -168,9 +176,11 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
                 .and_then(|ext| ext.to_str())
                 .map_or(false, |ext| file_types.contains(ext))
         })
-        .map(|e| card::parse_file(e.path()))
-        .collect::<Result<Vec<_>>>()
-        .map(|vecs| vecs.into_iter().flatten().collect())
+        .try_fold(Vec::new(), |mut acc, e| {
+            let mut cards = card::parse_file(e.path())?;
+            acc.append(&mut cards);
+            Ok(acc)
+        })
 }
 
 fn filter_cards(
@@ -205,8 +215,8 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
-    if !PathBuf::from(&**DB_PATH).exists() {
-        std::fs::create_dir_all(&**DB_PATH)?;
+    if !PathBuf::from(&*DB_PATH).exists() {
+        std::fs::create_dir_all(&*DB_PATH)?;
     }
 
     // Acquire lock file with proper RAII cleanup
