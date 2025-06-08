@@ -76,7 +76,8 @@ impl App {
                         // Make no sense to delete a leech card
                         self.cards.push(card);
                     } else {
-                        if let Err(_) = (self.delete_fn)(card.card.id) {
+                        if let Err(e) = (self.delete_fn)(card.card.id) {
+                            log::error!("Failed to delete card {}: {}", card.card.id, e);
                             // If deletion fails, put the card back
                             self.cards.insert(self.current_card, card);
                         } else {

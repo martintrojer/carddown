@@ -152,7 +152,9 @@ impl App {
     }
 
     fn exit(&mut self) {
-        (self.update_fn)(std::mem::take(&mut self.cards), &self.global_state).unwrap();
+        if let Err(e) = (self.update_fn)(std::mem::take(&mut self.cards), &self.global_state) {
+            log::error!("Failed to update cards during exit: {}", e);
+        }
         self.ui.exit = true;
     }
 
@@ -271,7 +273,15 @@ impl App {
         let counter_text = if self.cards.is_empty() || self.ui.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
-            let card = self.cards.get(self.ui.current_card).unwrap();
+            let card = match self.cards.get(self.ui.current_card) {
+                Some(card) => card,
+                None => {
+                    return (
+                        block,
+                        Text::from(vec![Line::from(vec!["Card index out of bounds".into()])])
+                    );
+                }
+            };
             let mut lines: Vec<Line> = Vec::new();
             lines.push(if card.leech {
                 Line::from(vec!["Leech Card".red().bold()])
