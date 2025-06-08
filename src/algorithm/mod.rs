@@ -28,7 +28,7 @@ pub enum Quality {
 }
 
 impl Quality {
-    pub fn failed(&self) -> bool {
+    pub const fn failed(&self) -> bool {
         matches!(
             self,
             Self::IncorrectAndForgotten
