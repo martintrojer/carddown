@@ -12,10 +12,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use rand::prelude::*;
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::ErrorKind;
+use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
 use std::sync::LazyLock;
@@ -58,7 +59,7 @@ static DB_PATH: LazyLock<String> = LazyLock::new(|| {
         "{}/carddown",
         std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             std::env::var("HOME")
-                .map(|home| format!("{}/.local/state", home))
+                .map(|home| format!("{home}/.local/state"))
                 .unwrap_or_else(|_| format!("{}/.local/state", std::env::temp_dir().display()))
         })
     )
@@ -66,6 +67,25 @@ static DB_PATH: LazyLock<String> = LazyLock::new(|| {
 static DB_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/cards.json", &*DB_PATH));
 static STATE_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/state.json", &*DB_PATH));
 static LOCK_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/lock", &*DB_PATH));
+static SCAN_INDEX_FILE_PATH: LazyLock<String> =
+    LazyLock::new(|| format!("{}/scan_index.json", &*DB_PATH));
+
+type ScanIndex = HashMap<String, u64>; // file path -> mtime seconds
+
+fn load_scan_index() -> ScanIndex {
+    let path = PathBuf::from(&*SCAN_INDEX_FILE_PATH);
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        HashMap::new()
+    }
+}
+
+fn save_scan_index(index: &ScanIndex) {
+    if let Ok(json) = serde_json::to_string(index) {
+        let _ = std::fs::write(&*SCAN_INDEX_FILE_PATH, json);
+    }
+}
 
 #[derive(Debug, Clone, ValueEnum)]
 enum LeechMethod {
@@ -164,6 +184,7 @@ struct Args {
 }
 
 // walk file tree and parse all files
+#[allow(dead_code)]
 fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Vec<Card>> {
     let file_types: HashSet<&str> = HashSet::from_iter(file_types.iter().map(|s| s.as_str()));
     WalkDir::new(folder)
@@ -174,13 +195,36 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
             e.path()
                 .extension()
                 .and_then(|ext| ext.to_str())
-                .map_or(false, |ext| file_types.contains(ext))
+                .is_some_and(|ext| file_types.contains(ext))
         })
         .try_fold(Vec::new(), |mut acc, e| {
             let mut cards = card::parse_file(e.path())?;
             acc.append(&mut cards);
             Ok(acc)
         })
+}
+
+fn mtime_secs(path: &std::path::Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+}
+
+fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
+    WalkDir::new(folder)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| file_types.contains(ext))
+        })
+        .map(|e| e.path().to_path_buf())
+        .collect()
 }
 
 fn filter_cards(
@@ -239,8 +283,44 @@ fn main() -> Result<()> {
             path,
         } => {
             let all_cards = if path.is_dir() {
-                parse_cards_from_folder(&path, &file_types)?
+                let file_types_set: HashSet<&str> =
+                    HashSet::from_iter(file_types.iter().map(|s| s.as_str()));
+                let mut index = load_scan_index();
+                let files = collect_files(&path, &file_types_set);
+                let mut to_scan: Vec<PathBuf> = Vec::new();
+                if full {
+                    to_scan = files.clone();
+                } else {
+                    for f in files.iter() {
+                        let m = mtime_secs(f).unwrap_or(0);
+                        let key = f.to_string_lossy().to_string();
+                        if index.get(&key).copied().unwrap_or(0) < m {
+                            to_scan.push(f.clone());
+                        }
+                        // Update index with current mtime so next run can skip
+                        index.insert(key, m);
+                    }
+                }
+                // If not full and nothing changed, short-circuit
+                if !full && to_scan.is_empty() {
+                    log::info!("No modified files detected; skipping scan");
+                    return Ok(());
+                }
+                // Parse selected files
+                let mut acc: Vec<Card> = Vec::new();
+                for f in if full { files } else { to_scan } {
+                    let mut cs = card::parse_file(&f)?;
+                    acc.append(&mut cs);
+                }
+                // Save index for future incremental scans
+                save_scan_index(&index);
+                acc
             } else if path.is_file() {
+                // Single file; update index for this file
+                let mut index = load_scan_index();
+                let m = mtime_secs(&path).unwrap_or(0);
+                index.insert(path.to_string_lossy().to_string(), m);
+                save_scan_index(&index);
                 card::parse_file(&path)?
             } else {
                 vec![]

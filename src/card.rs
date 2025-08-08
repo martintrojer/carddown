@@ -37,12 +37,16 @@ fn parse_tags(line: &str) -> HashSet<String> {
 }
 
 fn strip_tags(line: &str) -> Result<String> {
-    let s = line
-        .split(&['#', '🧠'])
-        .next()
-        .context("error stripping tags")?
-        .trim();
-    Ok(s.trim().to_string())
+    // Preserve in-text '#' (e.g., "C#", "#1") and only strip from the first
+    // tag/marker segment onward. Prefer the brain marker, then a space+'#',
+    // then "#flashcard" as a fallback.
+    let s = line;
+    let cut_idx = s
+        .find('🧠')
+        .or_else(|| s.find(" #"))
+        .or_else(|| s.find("#flashcard"))
+        .unwrap_or(s.len());
+    Ok(s[..cut_idx].trim().to_string())
 }
 
 #[derive(Debug, Default)]

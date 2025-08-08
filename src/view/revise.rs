@@ -1,6 +1,7 @@
 use crate::algorithm::{update_meanq, Algorithm, Quality};
 use anyhow::Result;
 use chrono::{DateTime, Local};
+use rand::Rng;
 use ratatui::prelude::*;
 use std::io;
 use std::time::{Duration, Instant};
@@ -28,6 +29,8 @@ pub struct App {
     max_duration: usize,
     reverse_probability: f64,
     tags: Vec<String>,
+    // Whether each card should be reversed for this session
+    reverse_map: Vec<bool>,
     #[allow(clippy::type_complexity)]
     update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ui: UiState,
@@ -45,6 +48,10 @@ impl App {
         tags: Vec<String>,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
+        let mut rng = rand::thread_rng();
+        let reverse_map = (0..cards.len())
+            .map(|_| rng.gen::<f64>() < reverse_probability)
+            .collect();
         Self {
             algorithm,
             cards,
@@ -54,6 +61,7 @@ impl App {
             max_duration,
             reverse_probability,
             tags,
+            reverse_map,
             ui: UiState {
                 current_card: 0,
                 exit: false,
@@ -167,7 +175,7 @@ impl App {
             " Quit ".into(),
             "<Q> ".bold(),
             "Elapsed ".into(),
-            format!("{}:{:02} ", min, secs).bold(),
+            format!("{min}:{secs:02} ").bold(),
         ]));
         let block = Block::default()
             .title(title.alignment(Alignment::Center))
@@ -230,16 +238,24 @@ impl App {
     }
 
     fn card_revise(&self) -> (Block, Text) {
+        let reversed = self
+            .reverse_map
+            .get(self.ui.current_card)
+            .copied()
+            .unwrap_or(false);
         let title = Title::from(
             format!(
-                " Revise Cards {}/{} [{}] ",
+                " {} Revise Cards {}/{} [{} | algo:{} | rev:{:.2}] ",
+                if reversed { "[Reversed]" } else { "" },
                 std::cmp::min(self.cards.len(), 1 + self.ui.current_card),
                 self.cards.len(),
                 if self.tags.is_empty() {
                     "All Tags".to_string()
                 } else {
                     self.tags.join(", ")
-                }
+                },
+                self.algorithm.name(),
+                self.reverse_probability,
             )
             .bold(),
         );
@@ -256,8 +272,8 @@ impl App {
             "Help ".into(),
             "<?> ".bold(),
             "Elapsed ".into(),
-            format!("{}:{:02} ", min, secs).bold(),
-            format!(" [{}] ", self.algorithm.name()).bold(),
+            format!("{min}:{secs:02} ").bold(),
+            // algorithm printed in title; keep instruction compact
         ]));
         let block = Block::default()
             .title(title.alignment(Alignment::Center))
@@ -268,8 +284,7 @@ impl App {
             )
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
-        let reversed =
-            self.reverse_probability > 0.0 && rand::random::<f64>() < self.reverse_probability;
+        // 'reversed' already computed above; keep a local binding in scope
         let counter_text = if self.cards.is_empty() || self.ui.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
@@ -278,7 +293,7 @@ impl App {
                 None => {
                     return (
                         block,
-                        Text::from(vec![Line::from(vec!["Card index out of bounds".into()])])
+                        Text::from(vec![Line::from(vec!["Card index out of bounds".into()])]),
                     );
                 }
             };
@@ -291,20 +306,44 @@ impl App {
                 Line::from(vec!["".into()])
             });
             lines.push(Line::from(vec![]));
-            lines.push(Line::from(vec!["Prompt".bold()]));
-            if reversed && !self.ui.revealed {
-                lines.push(Line::from(vec!["<hidden>".into()]));
-            } else {
-                lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+            // Tags
+            if !card.card.tags.is_empty() {
+                let tags = card
+                    .card
+                    .tags
+                    .iter()
+                    .map(|t| t.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                lines.push(Line::from(vec!["Tags".bold()]));
+                lines.push(Line::from(vec![tags.into()]));
+                lines.push(Line::from(vec![]));
             }
-            lines.push(Line::from(vec![]));
-            lines.push(Line::from(vec!["Response".bold()]));
-            if reversed || self.ui.revealed {
+            if !reversed {
+                lines.push(Line::from(vec!["Prompt".bold()]));
+                lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+                lines.push(Line::from(vec![]));
+                lines.push(Line::from(vec!["Response".bold()]));
+                if self.ui.revealed {
+                    for l in card.card.response.iter() {
+                        lines.push(Line::from(vec![l.into()]));
+                    }
+                } else {
+                    lines.push(Line::from(vec!["<hidden>".into()]));
+                }
+            } else {
+                // Reversed: show response as the prompt; hide the original prompt until reveal
+                lines.push(Line::from(vec!["Prompt".bold()]));
                 for l in card.card.response.iter() {
                     lines.push(Line::from(vec![l.into()]));
                 }
-            } else {
-                lines.push(Line::from(vec!["<hidden>".into()]));
+                lines.push(Line::from(vec![]));
+                lines.push(Line::from(vec!["Response".bold()]));
+                if self.ui.revealed {
+                    lines.push(Line::from(vec![card.card.prompt.clone().into()]));
+                } else {
+                    lines.push(Line::from(vec!["<hidden>".into()]));
+                }
             }
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Last Revised".bold()]));

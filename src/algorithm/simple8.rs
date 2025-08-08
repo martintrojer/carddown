@@ -41,12 +41,12 @@ fn quality_to_ease(q: f64) -> f64 {
     let q2 = q * q;
     let q3 = q2 * q;
     let q4 = q3 * q;
-    
+
     // Use mul_add for better accuracy: a.mul_add(b, c) computes a * b + c
-    q4.mul_add(0.0542, 
-        q3.mul_add(-0.4848, 
-            q2.mul_add(1.4916, 
-                q.mul_add(-1.2403, 1.4515))))
+    q4.mul_add(
+        0.0542,
+        q3.mul_add(-0.4848, q2.mul_add(1.4916, q.mul_add(-1.2403, 1.4515))),
+    )
 }
 
 #[cfg(test)]
