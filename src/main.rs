@@ -361,7 +361,7 @@ fn main() -> Result<()> {
                 cram,
                 cram_hours,
             );
-            cards.shuffle(&mut rand::thread_rng());
+            cards.shuffle(&mut rand::rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             let mut terminal = view::init()?;
             let res = view::revise::App::new(

@@ -219,19 +219,19 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
     if new_ctr == 0 {
         log::info!("No new cards found");
     } else {
-        log::info!("Inserted {} new cards", new_ctr);
+        log::info!("Inserted {new_ctr} new cards");
     }
 
     if updated_ctr > 0 {
-        log::info!("Updated {} cards", updated_ctr);
+        log::info!("Updated {updated_ctr} cards");
     }
 
     if orphan_ctr > 0 {
-        log::warn!("Found {} orphaned cards", orphan_ctr);
+        log::warn!("Found {orphan_ctr} orphaned cards");
     }
 
     if unorphan_ctr > 0 {
-        log::info!("Unorphaned {} cards", unorphan_ctr);
+        log::info!("Unorphaned {unorphan_ctr} cards");
     }
 
     write_db(db_path, &card_db)
@@ -251,13 +251,13 @@ mod tests {
             .into_iter()
             .map(|entry| (entry.card.id, entry))
             .collect();
-        write_db(&file.path(), &db).unwrap();
+        write_db(file.path(), &db).unwrap();
         (file, db)
     }
 
     fn write_a_global_state(state: &GlobalState) -> NamedTempFile {
         let file = tempfile::NamedTempFile::new().unwrap();
-        write_global_state(&file.path(), state).unwrap();
+        write_global_state(file.path(), state).unwrap();
         file
     }
 
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn test_get_db() {
         let (file, db) = write_a_db(get_card_entries());
-        let read_db = get_db(&file.path()).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert_eq!(db, read_db);
     }
 
@@ -311,7 +311,7 @@ mod tests {
     fn test_get_global_state() {
         let mut state = GlobalState::default();
         let file = write_a_global_state(&state);
-        let read_state = get_global_state(&file.path()).unwrap();
+        let read_state = get_global_state(file.path()).unwrap();
         assert_eq!(state, read_state);
 
         state.optimal_factor_matrix = OptimalFactorMatrix::new();
@@ -319,7 +319,7 @@ mod tests {
             .optimal_factor_matrix
             .insert(1, HashMap::from([(OrderedFloat(2.4), 4.6)]));
         let file = write_a_global_state(&state);
-        let read_state = get_global_state(&file.path()).unwrap();
+        let read_state = get_global_state(file.path()).unwrap();
         assert_eq!(state, read_state);
     }
 
@@ -344,9 +344,9 @@ mod tests {
     #[test]
     fn test_delete_card() {
         let (file, mut db) = write_a_db(get_card_entries());
-        let id = db.keys().next().unwrap().clone();
-        delete_card(&file.path(), id).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
+        let id = *db.keys().next().unwrap();
+        delete_card(file.path(), id).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         db.remove(&id);
         assert_eq!(db, read_db);
     }
@@ -357,8 +357,8 @@ mod tests {
         let mut entry = get_card_entries().pop().unwrap();
         db.get_mut(&entry.card.id).unwrap().state.interval = 1;
         entry.state.interval = 1;
-        update_cards(&file.path(), vec![entry]).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
+        update_cards(file.path(), vec![entry]).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert_eq!(db, read_db);
     }
 
@@ -367,8 +367,8 @@ mod tests {
         let (file, _) = write_a_db(get_card_entries());
         let mut entry = get_card_entries().pop().unwrap();
         entry.card.prompt = "new prompt".to_string();
-        update_db(&file.path(), vec![entry.card.clone()], false).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
+        update_db(file.path(), vec![entry.card.clone()], false).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert_eq!(
             read_db.get(&entry.card.id).unwrap().card.prompt,
             "new prompt"
@@ -380,9 +380,9 @@ mod tests {
         let (file, _) = write_a_db(get_card_entries());
         let entry = get_card_entries().remove(0);
         assert!(entry.orphan);
-        update_db(&file.path(), vec![entry.card.clone()], false).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
-        assert_eq!(read_db.get(&entry.card.id).unwrap().orphan, false);
+        update_db(file.path(), vec![entry.card.clone()], false).unwrap();
+        let read_db = get_db(file.path()).unwrap();
+        assert!(!read_db.get(&entry.card.id).unwrap().orphan);
     }
 
     #[test]
@@ -398,8 +398,8 @@ mod tests {
             response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
-        update_db(&file.path(), vec![card], true).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
+        update_db(file.path(), vec![card], true).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert!(read_db.get(&entry.card.id).unwrap().orphan);
     }
 
@@ -414,8 +414,8 @@ mod tests {
             response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
-        update_db(&file.path(), vec![card.clone()], false).unwrap();
-        let read_db = get_db(&file.path()).unwrap();
+        update_db(file.path(), vec![card.clone()], false).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         db.insert(card.id, CardEntry::new(card));
         assert_eq!(db.len(), read_db.len());
         assert_eq!(
@@ -429,15 +429,15 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
 
         // Test operations on empty DB
-        let empty_db = get_db(&file.path()).unwrap();
+        let empty_db = get_db(file.path()).unwrap();
         assert!(empty_db.is_empty());
 
         // Test updating empty DB
-        update_db(&file.path(), vec![], true).unwrap();
-        assert!(get_db(&file.path()).unwrap().is_empty());
+        update_db(file.path(), vec![], true).unwrap();
+        assert!(get_db(file.path()).unwrap().is_empty());
 
         // Test deleting from empty DB
-        let result = delete_card(&file.path(), blake3::hash(b"nonexistent"));
+        let result = delete_card(file.path(), blake3::hash(b"nonexistent"));
         assert!(result.is_err());
     }
 
@@ -454,10 +454,10 @@ mod tests {
         entry2.state.interval = 10;
 
         // Update with both modifications
-        update_cards(&file.path(), vec![entry1.clone(), entry2.clone()]).unwrap();
+        update_cards(file.path(), vec![entry1.clone(), entry2.clone()]).unwrap();
 
         // Last update should win
-        let read_db = get_db(&file.path()).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert_eq!(read_db.get(&entry1.card.id).unwrap().state.interval, 10);
     }
 
@@ -475,20 +475,20 @@ mod tests {
 
         // Add same card twice in single update
         let cards = vec![card.clone(), card.clone()];
-        update_db(&file.path(), cards, true).unwrap();
+        update_db(file.path(), cards, true).unwrap();
 
-        let read_db = get_db(&file.path()).unwrap();
+        let read_db = get_db(file.path()).unwrap();
         assert_eq!(read_db.len(), 1); // Should only store one copy
     }
 
     #[test]
     fn test_global_state_edge_cases() {
-        let mut state = GlobalState::default();
-
-        // Test with very old last session
-        state.last_revise_session = Some(Utc::now() - chrono::Duration::days(365));
-        state.mean_q = Some(4.2);
-        state.total_cards_revised = 100;
+        let mut state = GlobalState {
+            last_revise_session: Some(Utc::now() - chrono::Duration::days(365)),
+            mean_q: Some(4.2),
+            total_cards_revised: 100,
+            ..Default::default()
+        };
 
         refresh_global_state(&mut state);
         assert_eq!(state.total_cards_revised, 0);

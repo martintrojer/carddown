@@ -48,9 +48,9 @@ impl App {
         tags: Vec<String>,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let reverse_map = (0..cards.len())
-            .map(|_| rng.gen::<f64>() < reverse_probability)
+            .map(|_| rng.random::<f64>() < reverse_probability)
             .collect();
         Self {
             algorithm,
@@ -82,7 +82,7 @@ impl App {
     }
 
     fn render_frame(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.size());
+        frame.render_widget(self, frame.area());
     }
 
     /// updates the application's state based on user input
@@ -161,29 +161,26 @@ impl App {
 
     fn exit(&mut self) {
         if let Err(e) = (self.update_fn)(std::mem::take(&mut self.cards), &self.global_state) {
-            log::error!("Failed to update cards during exit: {}", e);
+            log::error!("Failed to update cards during exit: {e}");
         }
         self.ui.exit = true;
     }
 
     fn help(&self) -> (Block, Text) {
-        let title = Title::from(" Key Bindings ".bold());
+        let title = Line::from(" Key Bindings ".bold());
         let secs = self.ui.started.elapsed().as_secs();
         let min = secs / 60;
         let secs = secs % 60;
-        let instructions = Title::from(Line::from(vec![
+        let instructions = Line::from(vec![
             " Quit ".into(),
             "<Q> ".bold(),
             "Elapsed ".into(),
             format!("{min}:{secs:02} ").bold(),
-        ]));
+        ]);
         let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
+            .title(title)
+            .title_bottom(instructions)
+            .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
 
@@ -243,7 +240,7 @@ impl App {
             .get(self.ui.current_card)
             .copied()
             .unwrap_or(false);
-        let title = Title::from(
+        let title = Line::from(
             format!(
                 " {} Revise Cards {}/{} [{} | algo:{} | rev:{:.2}] ",
                 if reversed { "[Reversed]" } else { "" },
@@ -262,7 +259,7 @@ impl App {
         let secs = self.ui.started.elapsed().as_secs();
         let min = secs / 60;
         let secs = secs % 60;
-        let instructions = Title::from(Line::from(vec![
+        let instructions = Line::from(vec![
             " Quit ".into(),
             "<Q> ".bold(),
             "Reveal ".into(),
@@ -274,14 +271,11 @@ impl App {
             "Elapsed ".into(),
             format!("{min}:{secs:02} ").bold(),
             // algorithm printed in title; keep instruction compact
-        ]));
+        ]);
         let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
+            .title(title)
+            .title_bottom(instructions)
+            .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
         // 'reversed' already computed above; keep a local binding in scope
@@ -967,7 +961,7 @@ mod tests {
         // Test with very small intervals
         app.cards[0].state.interval = u64::MIN;
         app.update_state(Quality::IncorrectAndForgotten);
-        assert!(app.cards[0].state.interval >= u64::MIN); // Should not go below minimum
+        assert_eq!(app.cards[0].state.interval, u64::MIN); // Should not go below minimum
     }
 
     #[test]

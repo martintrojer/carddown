@@ -40,7 +40,7 @@ impl App {
     }
 
     fn render_frame(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.size());
+        frame.render_widget(self, frame.area());
     }
 
     /// updates the application's state based on user input
@@ -77,7 +77,7 @@ impl App {
                         self.cards.push(card);
                     } else {
                         if let Err(e) = (self.delete_fn)(card.card.id) {
-                            log::error!("Failed to delete card {}: {}", card.card.id, e);
+                            log::error!("Failed to delete card {}: {e}", card.card.id);
                             // If deletion fails, put the card back
                             self.cards.insert(self.current_card, card);
                         } else {
@@ -115,22 +115,19 @@ impl App {
     }
 
     fn are_you_sure(&self) -> (Block, Text) {
-        let title = Title::from(" Are You Sure? ".bold());
-        let instructions = Title::from(Line::from(vec![
+        let title = Line::from(" Are You Sure? ".bold());
+        let instructions = Line::from(vec![
             " Quit ".into(),
             "<Q> ".bold(),
             " Yes ".into(),
             "<Y> ".blue().bold(),
             " No ".into(),
             "<N> ".red().bold(),
-        ]));
+        ]);
         let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
+            .title(title)
+            .title_bottom(instructions)
+            .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_set(border::DOUBLE);
         let counter_text = Text::from(vec![
@@ -144,7 +141,7 @@ impl App {
     }
 
     fn card_audit(&self) -> (Block, Text) {
-        let title = Title::from(
+        let title = Line::from(
             format!(
                 " Audit Cards {}/{}",
                 std::cmp::min(self.cards.len(), 1 + self.current_card),
@@ -152,20 +149,17 @@ impl App {
             )
             .bold(),
         );
-        let instructions = Title::from(Line::from(vec![
+        let instructions = Line::from(vec![
             " Quit ".into(),
             "<Q> ".blue().bold(),
             "<Left> <Right>".green().bold(),
             " Delete ".into(),
             "<D> ".red().bold(),
-        ]));
+        ]);
         let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
+            .title(title)
+            .title_bottom(instructions)
+            .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_set(border::ROUNDED);
 

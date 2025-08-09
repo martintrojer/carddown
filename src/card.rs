@@ -67,7 +67,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
     let mut cards = vec![];
     let mut state = ParseState::default();
     for (line_number, line) in contents.lines().enumerate() {
-        log::debug!("line_number: {}, line: {}", line_number, line);
+        log::debug!("line_number: {line_number}, line: {line}");
         log::debug!(
             "first_line: {:?}, card_lines: {:?}",
             state.first_line,
@@ -75,7 +75,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
         );
         if line.contains("#flashcard") || line.contains("🧠") {
             if let Some(caps) = ONE_LINE_CARD_RE.captures(line) {
-                log::debug!("caps: {:?}", caps);
+                log::debug!("caps: {caps:?}");
                 let prompt = caps
                     .get(1)
                     .context("error parsing card prompt")?
@@ -144,8 +144,8 @@ mod tests {
         let file = new_md_file().unwrap();
         let data =
             "What is the answer to life, the universe, and everything? #flashcard\n42\nand stuff\n---\n             q1:a1 🧠 ";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 2);
         let card = &cards[0];
         assert_eq!(
@@ -171,8 +171,8 @@ mod tests {
         let file = new_md_file().unwrap();
         let data =
             "What is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(
@@ -191,8 +191,8 @@ mod tests {
         );
 
         let data = "q1:a1 🧠 ";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
         assert_eq!(card.line, 0);
@@ -201,18 +201,18 @@ mod tests {
         assert!(card.tags.is_empty());
 
         let data = "";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
 
         let data = " hello : there";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
 
         let data = "#flashcard\nq1\na1\n#flashcard\nq2\na2\n-";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
     }
 
@@ -220,8 +220,8 @@ mod tests {
     fn test_parse_file_with_ignore() {
         let file = new_md_file().unwrap();
         let data = "@carddown-ignore\nWhat is the answer to life, the universe, and everything?: 42 #flashcard #foo #test";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
     }
 
@@ -289,35 +289,35 @@ mod tests {
 
         // Test empty prompt
         let data = "#flashcard\n\na1\n---";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 0);
 
         // Test empty lines between prompt and response
         let data = "prompt #flashcard\nq1\n\n\na1\n---";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].prompt, "prompt");
         assert_eq!(cards[0].response, vec!["q1", "", "", "a1"]);
 
         // Test multiple separators
         let data = "prompt#flashcard\nq1\na1\n---\n***\n---";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].response, vec!["q1", "a1"]);
 
         // Test mixed flashcard markers
         let data = "q1: a1 #flashcard\nq2: a2 🧠";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 2);
 
         // Test tags with special characters
         let data = "q1: a1 #flashcard #test-123 #test_456 #123test";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards[0].tags.len(), 3);
     }
 
@@ -327,20 +327,20 @@ mod tests {
 
         // Test incomplete multiline card (missing separator)
         let data = "prompt #flashcard\nq1\na1";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
 
         // Test malformed one-line card (should be empty because it doesn't match ONE_LINE_CARD_RE)
         let data = ": answer #flashcard";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
 
         // Test empty prompt in multiline card
         let data = "#flashcard\n\na1\n---";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert!(cards.is_empty());
     }
 
@@ -350,8 +350,8 @@ mod tests {
 
         // Test unicode characters in prompt and response
         let data = "¿Cómo estás?: Muy bien 🧠 #español";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].prompt, "¿Cómo estás?");
         assert_eq!(cards[0].response, vec!["Muy bien"]);
@@ -359,8 +359,8 @@ mod tests {
 
         // Test emojis and special characters
         let data = "What's your favorite emoji? 🤔 #flashcard\n😊\n⭐\n---";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].prompt, "What's your favorite emoji? 🤔");
         assert_eq!(cards[0].response, vec!["😊", "⭐"]);
@@ -377,8 +377,8 @@ multiline
 answer
 ---
 Q4: A4 #flashcard";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 4);
         assert_eq!(cards[0].prompt, "Q1");
         assert_eq!(cards[1].prompt, "Q2");
@@ -393,8 +393,8 @@ Q4: A4 #flashcard";
 
         // Test leading/trailing whitespace
         let data = "  Question  :  Answer  #flashcard  #tag1  ";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].prompt, "Question");
         assert_eq!(cards[0].response, vec!["Answer"]);
@@ -402,8 +402,8 @@ Q4: A4 #flashcard";
 
         // Test multiple spaces between elements
         let data = "Q1     :     A1     #flashcard     #tag1";
-        fs::write(&file.path(), data).unwrap();
-        let cards = parse_file(&file.path()).unwrap();
+        fs::write(file.path(), data).unwrap();
+        let cards = parse_file(file.path()).unwrap();
         assert_eq!(cards[0].prompt, "Q1");
         assert_eq!(cards[0].response, vec!["A1"]);
     }
@@ -415,11 +415,10 @@ Q4: A4 #flashcard";
 
         for separator in separators {
             let data = format!(
-                "Q1 #flashcard\nA1\n{}\nQ2 #flashcard\nA2\n{}",
-                separator, separator
+                "Q1 #flashcard\nA1\n{separator}\nQ2 #flashcard\nA2\n{separator}",
             );
-            fs::write(&file.path(), &data).unwrap();
-            let cards = parse_file(&file.path()).unwrap();
+            fs::write(file.path(), &data).unwrap();
+            let cards = parse_file(file.path()).unwrap();
             assert_eq!(cards.len(), 2);
             assert_eq!(cards[0].prompt, "Q1");
             assert_eq!(cards[1].prompt, "Q2");
