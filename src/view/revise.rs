@@ -166,7 +166,7 @@ impl App {
         self.ui.exit = true;
     }
 
-    fn help(&self) -> (Block, Text) {
+    fn help(&self) -> (Block<'_>, Text<'_>) {
         let title = Line::from(" Key Bindings ".bold());
         let secs = self.ui.started.elapsed().as_secs();
         let min = secs / 60;
@@ -234,7 +234,7 @@ impl App {
         (block, counter_text)
     }
 
-    fn card_revise(&self) -> (Block, Text) {
+    fn card_revise(&self) -> (Block<'_>, Text<'_>) {
         let reversed = self
             .reverse_map
             .get(self.ui.current_card)

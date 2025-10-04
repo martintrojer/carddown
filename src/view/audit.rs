@@ -114,7 +114,7 @@ impl App {
         self.exit = true;
     }
 
-    fn are_you_sure(&self) -> (Block, Text) {
+    fn are_you_sure(&self) -> (Block<'_>, Text<'_>) {
         let title = Line::from(" Are You Sure? ".bold());
         let instructions = Line::from(vec![
             " Quit ".into(),
@@ -140,7 +140,7 @@ impl App {
         (block, counter_text)
     }
 
-    fn card_audit(&self) -> (Block, Text) {
+    fn card_audit(&self) -> (Block<'_>, Text<'_>) {
         let title = Line::from(
             format!(
                 " Audit Cards {}/{}",
