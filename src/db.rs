@@ -82,19 +82,20 @@ pub struct GlobalState {
 }
 
 pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
-    if state_path.exists() {
-        let data = fs::read_to_string(state_path)
-            .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
-        match serde_json::from_str(&data) {
-            Ok(state) => Ok(state),
-            Err(_) => {
-                log::warn!("Global state corrupted, creating a new one");
-                Ok(GlobalState::default())
-            }
-        }
-    } else {
+    if !state_path.exists() {
         log::info!("No global state found, using default");
-        Ok(GlobalState::default())
+        return Ok(GlobalState::default());
+    }
+
+    let data = fs::read_to_string(state_path)
+        .with_context(|| format!("Failed to read `{}`", state_path.display()))?;
+
+    match serde_json::from_str(&data) {
+        Ok(state) => Ok(state),
+        Err(_) => {
+            log::warn!("Global state corrupted, creating a new one");
+            Ok(GlobalState::default())
+        }
     }
 }
 
@@ -122,6 +123,7 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         log::info!("No db found, creating new one");
         return Ok(HashMap::new());
     }
+
     let data = fs::read_to_string(db_path)
         .with_context(|| format!("Error reading `{}`", db_path.display()))?;
 
@@ -130,8 +132,9 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         return Ok(HashMap::new());
     }
 
-    let data: Vec<CardEntry> = serde_json::from_str(&data).context("Failed to deserialise db")?;
-    Ok(data
+    let entries: Vec<CardEntry> =
+        serde_json::from_str(&data).context("Failed to deserialise db")?;
+    Ok(entries
         .into_iter()
         .map(|entry| (entry.card.id, entry))
         .collect())
@@ -160,19 +163,22 @@ pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
     write_db(db_path, &card_db)
 }
 
+/// Get all card IDs from the database
+fn existing_ids(card_db: &CardDb) -> HashSet<blake3::Hash> {
+    card_db.keys().cloned().collect()
+}
+
 pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<()> {
     if found_cards.is_empty() {
         log::info!("No cards to add to db");
         return Ok(());
     }
+
     let mut card_db: CardDb = if !db_path.exists() {
         HashMap::new()
     } else {
         get_db(db_path)?
     };
-    fn existing_ids(card_db: &CardDb) -> HashSet<blake3::Hash> {
-        card_db.keys().cloned().collect()
-    }
 
     let mut found_card_db: CardDb = found_cards
         .into_iter()
@@ -185,8 +191,9 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
     let mut unorphan_ctr = 0;
     let mut updated_ctr = 0;
 
-    // update existing cards
-    for id in existing_ids(&card_db).intersection(&found_ids) {
+    // Update existing cards
+    let existing_ids_set = existing_ids(&card_db);
+    for id in existing_ids_set.intersection(&found_ids) {
         let mut entry = card_db.remove(id).unwrap();
         let new = found_card_db.remove(id).unwrap();
         if entry.card != new.card {
@@ -200,15 +207,17 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
         card_db.insert(*id, entry);
     }
 
-    // new cards
-    for id in found_ids.difference(&existing_ids(&card_db)) {
+    // Add new cards
+    let current_existing_ids = existing_ids(&card_db);
+    for id in found_ids.difference(&current_existing_ids) {
         card_db.insert(*id, found_card_db.remove(id).unwrap());
         new_ctr += 1;
     }
 
-    // orphaned cards
+    // Mark orphaned cards (only in full scan mode)
     if full {
-        for id in existing_ids(&card_db).difference(&found_ids) {
+        let final_existing_ids = existing_ids(&card_db);
+        for id in final_existing_ids.difference(&found_ids) {
             if let Some(entry) = card_db.get_mut(id) {
                 entry.orphan = true;
             }
@@ -216,6 +225,7 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
         }
     }
 
+    // Log results
     if new_ctr == 0 {
         log::info!("No new cards found");
     } else {

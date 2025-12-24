@@ -25,28 +25,25 @@ pub struct Card {
 }
 
 fn parse_tags(line: &str) -> HashSet<String> {
-    let mut tags: HashSet<String> = TAG_RE
+    TAG_RE
         .find_iter(line)
         .map(|m| m.as_str())
-        .filter(|s| !s.is_empty())
-        .filter_map(|s| s.strip_prefix('#').map(str::to_owned))
-        .filter(|s| !s.is_empty())
-        .collect();
-    tags.remove("flashcard");
-    tags
+        .filter_map(|s| s.strip_prefix('#'))
+        .filter(|s| !s.is_empty() && *s != "flashcard")
+        .map(str::to_owned)
+        .collect()
 }
 
 fn strip_tags(line: &str) -> Result<String> {
     // Preserve in-text '#' (e.g., "C#", "#1") and only strip from the first
     // tag/marker segment onward. Prefer the brain marker, then a space+'#',
     // then "#flashcard" as a fallback.
-    let s = line;
-    let cut_idx = s
+    let cut_idx = line
         .find('🧠')
-        .or_else(|| s.find(" #"))
-        .or_else(|| s.find("#flashcard"))
-        .unwrap_or(s.len());
-    Ok(s[..cut_idx].trim().to_string())
+        .or_else(|| line.find(" #"))
+        .or_else(|| line.find("#flashcard"))
+        .unwrap_or(line.len());
+    Ok(line[..cut_idx].trim().to_string())
 }
 
 #[derive(Debug, Default)]
@@ -414,9 +411,7 @@ Q4: A4 #flashcard";
         let separators = ["---", "- - -", "***", "* * *"];
 
         for separator in separators {
-            let data = format!(
-                "Q1 #flashcard\nA1\n{separator}\nQ2 #flashcard\nA2\n{separator}",
-            );
+            let data = format!("Q1 #flashcard\nA1\n{separator}\nQ2 #flashcard\nA2\n{separator}",);
             fs::write(file.path(), &data).unwrap();
             let cards = parse_file(file.path()).unwrap();
             assert_eq!(cards.len(), 2);

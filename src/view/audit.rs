@@ -5,6 +5,26 @@ use std::io;
 use std::time::Duration;
 
 use crate::db::CardEntry;
+
+/// Format a DateTime as a string in local time
+fn format_datetime(dt: DateTime<chrono::Utc>) -> String {
+    let l: DateTime<Local> = DateTime::from(dt);
+    l.format("%Y-%m-%d %H:%M").to_string()
+}
+
+/// Format an optional DateTime as a string, with a fallback for None
+fn format_datetime_opt(dt: Option<DateTime<chrono::Utc>>, fallback: &str) -> String {
+    dt.map(format_datetime)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Format a set of tags as a comma-separated string
+fn format_tags(tags: &std::collections::HashSet<String>) -> String {
+    tags.iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     symbols::border,
@@ -184,33 +204,20 @@ impl App {
             }
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Tags".bold()]));
-            lines.push(Line::from(vec![card
-                .card
-                .tags
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-                .into()]));
+            lines.push(Line::from(vec![format_tags(&card.card.tags).into()]));
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Revise Count".bold()]));
             lines.push(Line::from(vec![card.revise_count.to_string().into()]));
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Last Revised".bold()]));
-            lines.push(Line::from(vec![card
-                .last_revised
-                .map(|d| {
-                    let l: DateTime<Local> = DateTime::from(d);
-                    l.format("%Y-%m-%d %H:%M").to_string()
-                })
-                .unwrap_or("never".to_string())
-                .into()]));
+            lines.push(Line::from(vec![format_datetime_opt(
+                card.last_revised,
+                "never",
+            )
+            .into()]));
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Added".bold()]));
-            lines.push(Line::from(vec![{
-                let l: DateTime<Local> = DateTime::from(card.added);
-                l.format("%Y-%m-%d %H:%M").to_string().into()
-            }]));
+            lines.push(Line::from(vec![format_datetime(card.added).into()]));
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["File".bold()]));
             lines.push(Line::from(vec![

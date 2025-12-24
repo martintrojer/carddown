@@ -7,6 +7,26 @@ use std::io;
 use std::time::{Duration, Instant};
 
 use crate::db::{CardEntry, GlobalState};
+
+/// Format a DateTime as a string in local time
+fn format_datetime(dt: DateTime<chrono::Utc>) -> String {
+    let l: DateTime<Local> = DateTime::from(dt);
+    l.format("%Y-%m-%d %H:%M").to_string()
+}
+
+/// Format an optional DateTime as a string, with a fallback for None
+fn format_datetime_opt(dt: Option<DateTime<chrono::Utc>>, fallback: &str) -> String {
+    dt.map(format_datetime)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Format a set of tags as a comma-separated string
+fn format_tags(tags: &std::collections::HashSet<String>) -> String {
+    tags.iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     symbols::border,
@@ -302,15 +322,8 @@ impl App {
             lines.push(Line::from(vec![]));
             // Tags
             if !card.card.tags.is_empty() {
-                let tags = card
-                    .card
-                    .tags
-                    .iter()
-                    .map(|t| t.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 lines.push(Line::from(vec!["Tags".bold()]));
-                lines.push(Line::from(vec![tags.into()]));
+                lines.push(Line::from(vec![format_tags(&card.card.tags).into()]));
                 lines.push(Line::from(vec![]));
             }
             if !reversed {
@@ -341,14 +354,11 @@ impl App {
             }
             lines.push(Line::from(vec![]));
             lines.push(Line::from(vec!["Last Revised".bold()]));
-            lines.push(Line::from(vec![card
-                .last_revised
-                .map(|d| {
-                    let l: DateTime<Local> = DateTime::from(d);
-                    l.format("%Y-%m-%d %H:%M").to_string()
-                })
-                .unwrap_or("Never".to_string())
-                .into()]));
+            lines.push(Line::from(vec![format_datetime_opt(
+                card.last_revised,
+                "Never",
+            )
+            .into()]));
             Text::from(lines)
         };
 

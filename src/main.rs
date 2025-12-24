@@ -30,7 +30,7 @@ impl LockGuard {
         match OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&*LOCK_FILE_PATH)
+            .open(&PATHS.lock_file)
         {
             Ok(_) => Ok(LockGuard),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -42,38 +42,49 @@ impl LockGuard {
 
     fn force_new() -> Result<Self> {
         // Remove existing lock file if it exists
-        let _ = std::fs::remove_file(&*LOCK_FILE_PATH);
-        std::fs::File::create(&*LOCK_FILE_PATH)?;
+        let _ = std::fs::remove_file(&PATHS.lock_file);
+        std::fs::File::create(&PATHS.lock_file)?;
         Ok(LockGuard)
     }
 }
 
 impl Drop for LockGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&*LOCK_FILE_PATH);
+        let _ = std::fs::remove_file(&PATHS.lock_file);
     }
 }
 
-static DB_PATH: LazyLock<String> = LazyLock::new(|| {
-    format!(
+/// Centralized paths for carddown data files
+struct Paths {
+    db_dir: String,
+    db_file: String,
+    state_file: String,
+    lock_file: String,
+    scan_index_file: String,
+}
+
+static PATHS: LazyLock<Paths> = LazyLock::new(|| {
+    let db_dir = format!(
         "{}/carddown",
         std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             std::env::var("HOME")
                 .map(|home| format!("{home}/.local/state"))
                 .unwrap_or_else(|_| format!("{}/.local/state", std::env::temp_dir().display()))
         })
-    )
+    );
+    Paths {
+        db_file: format!("{}/cards.json", db_dir),
+        state_file: format!("{}/state.json", db_dir),
+        lock_file: format!("{}/lock", db_dir),
+        scan_index_file: format!("{}/scan_index.json", db_dir),
+        db_dir,
+    }
 });
-static DB_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/cards.json", &*DB_PATH));
-static STATE_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/state.json", &*DB_PATH));
-static LOCK_FILE_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/lock", &*DB_PATH));
-static SCAN_INDEX_FILE_PATH: LazyLock<String> =
-    LazyLock::new(|| format!("{}/scan_index.json", &*DB_PATH));
 
 type ScanIndex = HashMap<String, u64>; // file path -> mtime seconds
 
 fn load_scan_index() -> ScanIndex {
-    let path = PathBuf::from(&*SCAN_INDEX_FILE_PATH);
+    let path = PathBuf::from(&PATHS.scan_index_file);
     if let Ok(data) = std::fs::read_to_string(&path) {
         serde_json::from_str(&data).unwrap_or_default()
     } else {
@@ -83,7 +94,7 @@ fn load_scan_index() -> ScanIndex {
 
 fn save_scan_index(index: &ScanIndex) {
     if let Ok(json) = serde_json::to_string(index) {
-        let _ = std::fs::write(&*SCAN_INDEX_FILE_PATH, json);
+        let _ = std::fs::write(&PATHS.scan_index_file, json);
     }
 }
 
@@ -170,38 +181,17 @@ struct Args {
     command: Commands,
 
     /// Location of the card database file
-    #[arg(long, default_value = &**DB_FILE_PATH)]
+    #[arg(long, default_value = &*PATHS.db_file)]
     db: PathBuf,
 
     /// Location of the program state file
-    #[arg(long, default_value = &**STATE_FILE_PATH)]
+    #[arg(long, default_value = &*PATHS.state_file)]
     state: PathBuf,
 
     /// Override file locking mechanism.
     /// Warning: Only use if no other carddown instances are running
     #[arg(long)]
     force: bool,
-}
-
-// walk file tree and parse all files
-#[allow(dead_code)]
-fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Vec<Card>> {
-    let file_types: HashSet<&str> = HashSet::from_iter(file_types.iter().map(|s| s.as_str()));
-    WalkDir::new(folder)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| file_types.contains(ext))
-        })
-        .try_fold(Vec::new(), |mut acc, e| {
-            let mut cards = card::parse_file(e.path())?;
-            acc.append(&mut cards);
-            Ok(acc)
-        })
 }
 
 fn mtime_secs(path: &std::path::Path) -> Option<u64> {
@@ -212,6 +202,12 @@ fn mtime_secs(path: &std::path::Path) -> Option<u64> {
         .map(|d| d.as_secs())
 }
 
+/// Convert file type strings to a HashSet for efficient lookup
+fn file_types_to_set(file_types: &[String]) -> HashSet<&str> {
+    HashSet::from_iter(file_types.iter().map(|s| s.as_str()))
+}
+
+/// Collect all files matching the given file types from a directory
 fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
     WalkDir::new(folder)
         .into_iter()
@@ -227,6 +223,19 @@ fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
         .collect()
 }
 
+// walk file tree and parse all files
+#[cfg(test)]
+fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Vec<Card>> {
+    let file_types_set = file_types_to_set(file_types);
+    collect_files(folder, &file_types_set)
+        .into_iter()
+        .try_fold(Vec::new(), |mut acc, path| {
+            let mut cards = card::parse_file(&path)?;
+            acc.append(&mut cards);
+            Ok(acc)
+        })
+}
+
 fn filter_cards(
     db: CardDb,
     tags: HashSet<String>,
@@ -238,18 +247,24 @@ fn filter_cards(
     let today = chrono::Utc::now();
     db.into_values()
         .filter(|c| {
-            if let Some(last_revised) = c.last_revised {
-                if cram_mode {
-                    today - last_revised >= chrono::Duration::hours(cram_hours as i64)
-                } else {
-                    let next_date = last_revised + chrono::Duration::days(c.state.interval as i64);
-                    today >= next_date
+            // Filter by due date
+            match c.last_revised {
+                Some(last_revised) => {
+                    if cram_mode {
+                        today - last_revised >= chrono::Duration::hours(cram_hours as i64)
+                    } else {
+                        let next_date =
+                            last_revised + chrono::Duration::days(c.state.interval as i64);
+                        today >= next_date
+                    }
                 }
-            } else {
-                true
+                None => true, // Never reviewed cards are always due
             }
         })
-        .filter(|c| tags.is_empty() || c.card.tags.intersection(&tags).count() > 0)
+        .filter(|c| {
+            // Filter by tags (empty tags means all tags)
+            tags.is_empty() || c.card.tags.intersection(&tags).count() > 0
+        })
         .filter(|c| include_orphans || !c.orphan)
         .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
         .collect()
@@ -259,8 +274,8 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
-    if !PathBuf::from(&*DB_PATH).exists() {
-        std::fs::create_dir_all(&*DB_PATH)?;
+    if !PathBuf::from(&PATHS.db_dir).exists() {
+        std::fs::create_dir_all(&PATHS.db_dir)?;
     }
 
     // Acquire lock file with proper RAII cleanup
@@ -283,8 +298,7 @@ fn main() -> Result<()> {
             path,
         } => {
             let all_cards = if path.is_dir() {
-                let file_types_set: HashSet<&str> =
-                    HashSet::from_iter(file_types.iter().map(|s| s.as_str()));
+                let file_types_set = file_types_to_set(&file_types);
                 let mut index = load_scan_index();
                 let files = collect_files(&path, &file_types_set);
                 let mut to_scan: Vec<PathBuf> = Vec::new();
