@@ -24,7 +24,7 @@ cargo install carddown
 CARDDOWN has 3 commands:
 
 - scan: Scan files and folders for new and or updated flashcards.
-- audit: Show statistics about your flashcards, prune orphan a leech cards.
+- audit: Show statistics about your flashcards, prune orphan and leech cards.
 - revise: Study your flashcards.
 
 Audit and Revise mode use a terminal UI, with help prompts to describe key bindings.
