@@ -8,7 +8,7 @@ use crate::card::Card;
 use crate::db::CardDb;
 use crate::db::CardEntry;
 use algorithm::new_algorithm;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use rand::prelude::*;
@@ -83,6 +83,15 @@ static PATHS: LazyLock<Paths> = LazyLock::new(|| {
 
 type ScanIndex = HashMap<String, u64>; // file path -> mtime seconds
 
+/// Default values for command-line arguments
+mod defaults {
+    pub const MAX_CARDS_PER_SESSION: usize = 30;
+    pub const MAX_DURATION_MINUTES: usize = 20;
+    pub const LEECH_FAILURE_THRESHOLD: usize = 15;
+    pub const CRAM_HOURS: usize = 12;
+    pub const REVERSE_PROBABILITY: f64 = 0.0;
+}
+
 fn load_scan_index() -> ScanIndex {
     let path = PathBuf::from(&PATHS.scan_index_file);
     if let Ok(data) = std::fs::read_to_string(&path) {
@@ -98,7 +107,7 @@ fn save_scan_index(index: &ScanIndex) {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 enum LeechMethod {
     Skip,
     Warn,
@@ -109,7 +118,7 @@ enum Commands {
     /// Scan files for flashcards and add them to the database
     Scan {
         /// File extensions to scan (e.g., md, txt, org)
-        #[arg(long, default_values_t = ["md".to_string(), "txt".to_string(), "org".to_string()])]
+        #[arg(long, default_values = ["md", "txt", "org"])]
         file_types: Vec<String>,
 
         /// Perform a complete rescan instead of only checking modified files.
@@ -127,15 +136,15 @@ enum Commands {
     /// Start a flashcard review session
     Revise {
         /// Limit the number of cards to review in this session
-        #[arg(long, default_value_t = 30)]
+        #[arg(long, default_value_t = defaults::MAX_CARDS_PER_SESSION)]
         maximum_cards_per_session: usize,
 
         /// Maximum length of review session in minutes
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = defaults::MAX_DURATION_MINUTES)]
         maximum_duration_of_session: usize,
 
         /// Number of failures before a card is marked as a leech
-        #[arg(long, default_value_t = 15)]
+        #[arg(long, default_value_t = defaults::LEECH_FAILURE_THRESHOLD)]
         leech_failure_threshold: usize,
 
         /// How to handle leech cards during review:
@@ -157,7 +166,7 @@ enum Commands {
         include_orphans: bool,
 
         /// Chance to swap question/answer (0.0 = never, 1.0 = always)
-        #[arg(long, default_value_t = 0.0)]
+        #[arg(long, default_value_t = defaults::REVERSE_PROBABILITY)]
         reverse_probability: f64,
 
         /// Enable review of all cards not seen in --cram-hours, ignoring intervals
@@ -166,7 +175,7 @@ enum Commands {
         cram: bool,
 
         /// Hours since last review for cards to include in cram mode
-        #[arg(long, default_value_t = 12)]
+        #[arg(long, default_value_t = defaults::CRAM_HOURS)]
         cram_hours: usize,
     },
 }
@@ -202,12 +211,18 @@ fn mtime_secs(path: &std::path::Path) -> Option<u64> {
         .map(|d| d.as_secs())
 }
 
-/// Convert file type strings to a HashSet for efficient lookup
+/// Convert file type strings to a HashSet for efficient lookup.
+///
+/// This allows O(1) lookup when checking if a file extension matches
+/// the desired file types during scanning.
 fn file_types_to_set(file_types: &[String]) -> HashSet<&str> {
     HashSet::from_iter(file_types.iter().map(|s| s.as_str()))
 }
 
-/// Collect all files matching the given file types from a directory
+/// Collect all files matching the given file types from a directory.
+///
+/// Recursively walks the directory tree and returns all files whose
+/// extension matches one of the provided file types.
 fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
     WalkDir::new(folder)
         .into_iter()
@@ -236,6 +251,14 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
         })
 }
 
+/// Filter cards based on various criteria for review sessions.
+/// Filter cards based on various criteria for review sessions.
+///
+/// Returns cards that:
+///   - Are due for review (based on interval or cram mode)
+///   - Match the specified tags (if any)
+///   - Are not orphaned (unless include_orphans is true)
+///   - Are not leeches (unless leech_method allows them)
 fn filter_cards(
     db: CardDb,
     tags: HashSet<String>,
@@ -246,28 +269,42 @@ fn filter_cards(
 ) -> Vec<CardEntry> {
     let today = chrono::Utc::now();
     db.into_values()
-        .filter(|c| {
-            // Filter by due date
-            match c.last_revised {
-                Some(last_revised) => {
-                    if cram_mode {
-                        today - last_revised >= chrono::Duration::hours(cram_hours as i64)
-                    } else {
-                        let next_date =
-                            last_revised + chrono::Duration::days(c.state.interval as i64);
-                        today >= next_date
-                    }
-                }
-                None => true, // Never reviewed cards are always due
-            }
-        })
-        .filter(|c| {
-            // Filter by tags (empty tags means all tags)
-            tags.is_empty() || c.card.tags.intersection(&tags).count() > 0
-        })
+        .filter(|c| is_card_due(c, today, cram_mode, cram_hours))
+        .filter(|c| matches_tags(c, &tags))
         .filter(|c| include_orphans || !c.orphan)
-        .filter(|c| !(matches!(leech_method, LeechMethod::Skip) && c.leech))
+        .filter(|c| !should_skip_leech(c, leech_method))
         .collect()
+}
+
+/// Check if a card is due for review based on its last revision date and interval.
+fn is_card_due(
+    card: &CardEntry,
+    today: chrono::DateTime<chrono::Utc>,
+    cram_mode: bool,
+    cram_hours: usize,
+) -> bool {
+    match card.last_revised {
+        Some(last_revised) => {
+            if cram_mode {
+                today - last_revised >= chrono::Duration::hours(cram_hours as i64)
+            } else {
+                let next_date = last_revised + chrono::Duration::days(card.state.interval as i64);
+                today >= next_date
+            }
+        }
+        None => true, // Never reviewed cards are always due
+    }
+}
+
+/// Check if a card matches the specified tags.
+/// Returns true if no tags are specified (all cards match) or if the card has any matching tag.
+fn matches_tags(card: &CardEntry, tags: &HashSet<String>) -> bool {
+    tags.is_empty() || card.card.tags.intersection(tags).next().is_some()
+}
+
+/// Check if a leech card should be skipped based on the leech method.
+fn should_skip_leech(card: &CardEntry, leech_method: LeechMethod) -> bool {
+    matches!(leech_method, LeechMethod::Skip) && card.leech
 }
 
 fn main() -> Result<()> {
@@ -280,15 +317,9 @@ fn main() -> Result<()> {
 
     // Acquire lock file with proper RAII cleanup
     let _lock_guard = if args.force {
-        LockGuard::force_new()?
+        LockGuard::force_new().context("Failed to acquire lock file (force mode)")?
     } else {
-        match LockGuard::new() {
-            Ok(guard) => guard,
-            Err(_) => {
-                log::error!("Another instance of carddown is running, or the previous instance crashed. Use --force to remove the lock file.");
-                std::process::exit(1);
-            }
-        }
+        LockGuard::new().context("Failed to acquire lock file. Another instance may be running. Use --force to remove the lock file.")?
     };
 
     match args.command {
@@ -318,12 +349,14 @@ fn main() -> Result<()> {
                 // If not full and nothing changed, short-circuit
                 if !full && to_scan.is_empty() {
                     log::info!("No modified files detected; skipping scan");
+                    save_scan_index(&index); // Still save index even if nothing changed
                     return Ok(());
                 }
                 // Parse selected files
+                let files_to_parse = if full { &files } else { &to_scan };
                 let mut acc: Vec<Card> = Vec::new();
-                for f in if full { files } else { to_scan } {
-                    let mut cs = card::parse_file(&f)?;
+                for f in files_to_parse {
+                    let mut cs = card::parse_file(f)?;
                     acc.append(&mut cs);
                 }
                 // Save index for future incremental scans
@@ -560,7 +593,7 @@ mod tests {
             db,
             tags.clone(),
             include_orphans,
-            leech_method.clone(),
+            leech_method,
             cram_mode,
             cram_hours,
         );
@@ -574,7 +607,7 @@ mod tests {
             db,
             tags.clone(),
             include_orphans,
-            leech_method.clone(),
+            leech_method,
             cram_mode,
             cram_hours,
         );
