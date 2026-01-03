@@ -1,32 +1,12 @@
 use crate::algorithm::{update_meanq, Algorithm, Quality};
+use crate::view::formatting::{format_datetime_opt, format_tags};
 use anyhow::Result;
-use chrono::{DateTime, Local};
 use rand::Rng;
 use ratatui::prelude::*;
 use std::io;
 use std::time::{Duration, Instant};
 
 use crate::db::{CardEntry, GlobalState};
-
-/// Format a DateTime as a string in local time
-fn format_datetime(dt: DateTime<chrono::Utc>) -> String {
-    let l: DateTime<Local> = DateTime::from(dt);
-    l.format("%Y-%m-%d %H:%M").to_string()
-}
-
-/// Format an optional DateTime as a string, with a fallback for None
-fn format_datetime_opt(dt: Option<DateTime<chrono::Utc>>, fallback: &str) -> String {
-    dt.map(format_datetime)
-        .unwrap_or_else(|| fallback.to_string())
-}
-
-/// Format a set of tags as a comma-separated string
-fn format_tags(tags: &std::collections::HashSet<String>) -> String {
-    tags.iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     symbols::border,
@@ -125,25 +105,37 @@ impl App {
 
     fn update_state(&mut self, quality: Quality) {
         self.ui.revealed = false;
-        let current_card = self.ui.current_card;
+        
         if self.cards.is_empty() {
             return;
         }
-        if self.ui.current_card >= self.cards.len() {
+        
+        let current_card = self.ui.current_card;
+        
+        // Check if we've reached the end of the card list
+        if current_card >= self.cards.len() {
             self.exit();
-        } else {
-            self.ui.current_card += 1;
+            return;
         }
+        
+        // Update global statistics
         update_meanq(&mut self.global_state, quality);
+        
+        // Update the current card's state
         if let Some(card) = self.cards.get_mut(current_card) {
             card.last_revised = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm
                 .update_state(&quality, &mut card.state, &mut self.global_state);
+            
+            // Check if card should be marked as leech
             if card.state.failed_count >= self.leech_threshold as u64 {
                 card.leech = true;
             }
         }
+        
+        // Move to next card
+        self.ui.current_card += 1;
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {

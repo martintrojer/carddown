@@ -4,6 +4,7 @@ use std::io;
 use std::io::{stdout, Stdout};
 
 pub mod audit;
+pub mod formatting;
 pub mod revise;
 
 /// A type alias for the terminal type used in this application

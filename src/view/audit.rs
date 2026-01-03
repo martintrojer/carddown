@@ -1,30 +1,10 @@
+use crate::view::formatting::{format_datetime, format_datetime_opt, format_tags};
 use anyhow::Result;
-use chrono::{DateTime, Local};
 use ratatui::prelude::*;
 use std::io;
 use std::time::Duration;
 
 use crate::db::CardEntry;
-
-/// Format a DateTime as a string in local time
-fn format_datetime(dt: DateTime<chrono::Utc>) -> String {
-    let l: DateTime<Local> = DateTime::from(dt);
-    l.format("%Y-%m-%d %H:%M").to_string()
-}
-
-/// Format an optional DateTime as a string, with a fallback for None
-fn format_datetime_opt(dt: Option<DateTime<chrono::Utc>>, fallback: &str) -> String {
-    dt.map(format_datetime)
-        .unwrap_or_else(|| fallback.to_string())
-}
-
-/// Format a set of tags as a comma-separated string
-fn format_tags(tags: &std::collections::HashSet<String>) -> String {
-    tags.iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     symbols::border,
@@ -90,24 +70,23 @@ impl App {
                 self.sure = false;
             }
             KeyCode::Char('y') | KeyCode::Char('Y') => {
-                if self.sure {
+                if self.sure && !self.cards.is_empty() {
                     let card = self.cards.remove(self.current_card);
                     if card.leech {
-                        // Make no sense to delete a leech card
-                        self.cards.push(card);
+                        // Don't allow deletion of leech cards
+                        log::warn!("Cannot delete leech card: {}", card.card.id);
+                        self.cards.insert(self.current_card, card);
+                    } else if let Err(e) = (self.delete_fn)(card.card.id) {
+                        log::error!("Failed to delete card {}: {e}", card.card.id);
+                        // If deletion fails, put the card back
+                        self.cards.insert(self.current_card, card);
                     } else {
-                        if let Err(e) = (self.delete_fn)(card.card.id) {
-                            log::error!("Failed to delete card {}: {e}", card.card.id);
-                            // If deletion fails, put the card back
-                            self.cards.insert(self.current_card, card);
-                        } else {
-                            // After successful deletion, ensure current_card is valid
-                            if self.current_card >= self.cards.len() && !self.cards.is_empty() {
-                                self.current_card = self.cards.len() - 1;
-                            }
+                        // After successful deletion, ensure current_card is valid
+                        if self.current_card >= self.cards.len() && !self.cards.is_empty() {
+                            self.current_card = self.cards.len() - 1;
                         }
-                        self.sure = false;
                     }
+                    self.sure = false;
                 }
             }
             KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('k') => {
