@@ -13,7 +13,10 @@ use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Atomically write content to a file using temp file + rename
+/// Atomically write content to a file using temp file + rename.
+///
+/// This ensures that if the write fails, the original file is not corrupted.
+/// The operation is atomic at the filesystem level.
 fn atomic_write(path: &Path, content: &str) -> Result<()> {
     let temp_path = path.with_extension("tmp");
 
@@ -81,6 +84,9 @@ pub struct GlobalState {
     pub total_cards_revised: u64,
 }
 
+/// Load the global state from disk, or return a default state if it doesn't exist.
+///
+/// If the state file is corrupted, logs a warning and returns a default state.
 pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     if !state_path.exists() {
         log::info!("No global state found, using default");
@@ -99,6 +105,9 @@ pub fn get_global_state(state_path: &Path) -> Result<GlobalState> {
     }
 }
 
+/// Refresh the global state, resetting statistics if the last session was more than a week ago.
+///
+/// This prevents stale statistics from affecting new review sessions.
 pub fn refresh_global_state(state: &mut GlobalState) {
     let now = chrono::Utc::now();
     // Reset mean_q if last revision session was more than a week ago
@@ -118,6 +127,10 @@ pub fn write_global_state(state_path: &Path, state: &GlobalState) -> Result<()> 
         .with_context(|| format!("Error writing to `{}`", state_path.display()))
 }
 
+/// Load the card database from disk.
+///
+/// Returns an empty database if the file doesn't exist or is empty.
+/// Returns an error if the file exists but contains invalid JSON.
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
     if !db_path.exists() {
         log::info!("No db found, creating new one");
@@ -147,6 +160,9 @@ fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
         .with_context(|| format!("Error writing to `{}`", db_path.display()))
 }
 
+/// Delete a card from the database by its ID.
+///
+/// Returns an error if the card with the given ID is not found.
 pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
     let mut card_db = get_db(db_path)?;
     if card_db.remove(&id).is_none() {
@@ -155,6 +171,10 @@ pub fn delete_card(db_path: &Path, id: blake3::Hash) -> Result<()> {
     write_db(db_path, &card_db)
 }
 
+/// Update multiple cards in the database.
+///
+/// Cards are identified by their ID. If a card with the same ID already exists,
+/// it will be replaced with the new entry.
 pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
     let mut card_db = get_db(db_path)?;
     for card in cards {
@@ -168,6 +188,12 @@ fn existing_ids(card_db: &CardDb) -> HashSet<blake3::Hash> {
     card_db.keys().cloned().collect()
 }
 
+/// Update the database with newly scanned cards.
+///
+/// - Updates existing cards if their content has changed
+/// - Adds new cards that weren't in the database
+/// - Marks cards as orphaned (if `full` is true) if they're no longer found in the scan
+/// - Unmarks cards that were orphaned but are now found again
 pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<()> {
     if found_cards.is_empty() {
         log::info!("No cards to add to db");
