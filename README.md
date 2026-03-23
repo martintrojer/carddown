@@ -2,7 +2,7 @@
 
 A CLI flashcard system with spaced repetition that lives in your text files.
 
-![carddown](img/carddown.png)
+![carddown demo](doc/demo.gif)
 
 Study facts embedded in your markdown notes, tracked by content hash so cards survive edits and file moves. No cloud, no sync, no binary formats — just your files and a JSON database.
 
