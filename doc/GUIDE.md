@@ -49,7 +49,7 @@ Options:
 | `--tag` | (all) | Filter by tag (repeatable) |
 | `--include-orphans` | off | Include orphaned cards |
 | `--reverse-probability` | 0.0 | Chance to swap prompt/response |
-| `--cram` | off | Ignore intervals, review all cards |
+| `--cram` | off | Ignore intervals, review all cards (doesn't affect stats) |
 | `--cram-hours` | 12 | Hours since last review for cram mode |
 
 #### Revise workflow
@@ -77,7 +77,7 @@ Review orphaned and leech cards in an interactive TUI.
 carddown audit
 ```
 
-Navigate with arrow keys or `h`/`l`. Press `d` then `y` to delete orphaned cards. Leech cards cannot be deleted — they should be rewritten in your source files.
+Navigate with arrow keys (`h`/`k` for left, `l`/`j` for right). Press `d` then `y` to delete orphaned cards. Leech cards cannot be deleted — they should be rewritten in your source files.
 
 ### Global flags
 
