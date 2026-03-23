@@ -79,12 +79,24 @@ carddown audit
 
 Navigate with arrow keys (`h`/`k` for left, `l`/`j` for right). Press `d` then `y` to delete orphaned cards. Leech cards cannot be deleted — they should be rewritten in your source files.
 
+### Import
+
+Merge review history from another carddown database into the current vault.
+
+```bash
+carddown import ~/.local/state/carddown/cards.json   # migrate from pre-0.2.0
+carddown import ../other-vault/.carddown/cards.json   # merge from another vault
+```
+
+Cards are matched by content hash. Only cards that exist in both databases are updated, and only if the source has more reviews than the target. This is safe to run multiple times.
+
+**Migrating from pre-0.2.0:** Older versions stored data globally in `~/.local/state/carddown/`. After scanning your notes with 0.2.0+ (which creates a local `.carddown/`), run `carddown import ~/.local/state/carddown/cards.json` to bring over your review history.
+
 ### Global flags
 
 | Flag | Description |
 |---|---|
-| `--db <path>` | Custom database file location |
-| `--state <path>` | Custom state file location |
+| `--vault <path>` | Override vault root directory |
 | `--force` | Override lock file (use if no other instance is running) |
 
 ## Card format
@@ -129,18 +141,29 @@ What is DNA? : Deoxyribonucleic acid 🧠 #biology #genetics
 
 Add `@carddown-ignore` anywhere in a file to skip it during scanning.
 
-## Data storage
+## Vaults
 
-Carddown stores its data in `~/.local/state/carddown/` (or `$XDG_STATE_HOME/carddown/`):
+Carddown stores data per-vault in a `.carddown/` directory at the project root. The vault root is discovered by walking up from the current directory (or scan path) looking for `.carddown/`, `.git/`, `.hg/`, or `.jj/`.
 
-| File | Purpose |
-|---|---|
-| `cards.json` | Card database with review history |
-| `state.json` | Global state (mean quality, session count) |
-| `scan_index.json` | File modification times for incremental scanning |
-| `lock` | Lock file to prevent concurrent access |
+```
+my-notes/
+├── .git/
+├── .carddown/          ← created automatically
+│   ├── cards.json      ← card database with review history
+│   ├── state.json      ← global state (mean quality, session count)
+│   ├── scan_index.json ← file modification times for incremental scanning
+│   └── lock            ← lock file to prevent concurrent access
+├── physics/
+│   └── notes.md
+└── biology/
+    └── notes.md
+```
+
+Each vault is independent — scanning and reviewing in one vault never affects another. Use `--vault <path>` to override auto-discovery.
 
 All files are human-readable JSON. Cards are identified by blake3 content hash, so they survive file moves and edits to surrounding text.
+
+Consider adding `.carddown/` to your `.gitignore`.
 
 ## Terminology
 

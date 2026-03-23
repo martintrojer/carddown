@@ -59,6 +59,7 @@ Tags like `#physics` let you focus study sessions: `carddown revise --tag physic
 
 | Feature | |
 |---|---|
+| **Per-vault storage** | Data lives in `.carddown/` alongside your notes — multiple vaults stay independent |
 | **Spaced repetition** | SM2, SM5, and Simple8 algorithms with quality grades 0-5 |
 | **Content hashing** | Cards identified by blake3 hash — move files freely |
 | **Tags** | Filter study sessions by topic |

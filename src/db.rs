@@ -151,7 +151,7 @@ pub fn get_db(db_path: &Path) -> Result<CardDb> {
         .collect())
 }
 
-fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
+pub fn write_db(db_path: &Path, db: &CardDb) -> Result<()> {
     let data = db.values().collect::<Vec<_>>();
     let json_content = serde_json::to_string(&data).context("Error serializing db")?;
     atomic_write(db_path, &json_content)
