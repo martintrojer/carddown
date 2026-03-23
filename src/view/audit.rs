@@ -11,12 +11,23 @@ use ratatui::{
     widgets::{block::*, *},
 };
 
+enum StatusKind {
+    Info,
+    Success,
+    Error,
+}
+
+struct StatusMessage {
+    text: String,
+    kind: StatusKind,
+}
+
 pub struct App {
     cards: Vec<CardEntry>,
     current_card: usize,
     exit: bool,
     sure: bool,
-    status_message: Option<String>,
+    status: Option<StatusMessage>,
     delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>>,
 }
 
@@ -28,7 +39,7 @@ impl App {
             current_card: 0,
             exit: false,
             sure: false,
-            status_message: None,
+            status: None,
         }
     }
 
@@ -66,26 +77,35 @@ impl App {
             KeyCode::Char('d') | KeyCode::Char('D') => {
                 if !self.cards.is_empty() {
                     self.sure = true;
-                    self.status_message = None;
+                    self.status = None;
                 }
             }
             KeyCode::Char('n') | KeyCode::Char('N') => {
                 self.sure = false;
-                self.status_message = None;
+                self.status = None;
             }
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 if self.sure && !self.cards.is_empty() {
                     let card = self.cards.remove(self.current_card);
                     if card.leech {
                         log::warn!("Cannot delete leech card: {}", card.card.id);
-                        self.status_message = Some("Cannot delete leech cards".to_string());
+                        self.status = Some(StatusMessage {
+                            text: "Cannot delete leech cards".to_string(),
+                            kind: StatusKind::Error,
+                        });
                         self.cards.insert(self.current_card, card);
                     } else if let Err(e) = (self.delete_fn)(card.card.id) {
                         log::error!("Failed to delete card {}: {e}", card.card.id);
-                        // If deletion fails, put the card back
+                        self.status = Some(StatusMessage {
+                            text: format!("Delete failed: {e}"),
+                            kind: StatusKind::Error,
+                        });
                         self.cards.insert(self.current_card, card);
                     } else {
-                        // After successful deletion, ensure current_card is valid
+                        self.status = Some(StatusMessage {
+                            text: "Card deleted".to_string(),
+                            kind: StatusKind::Success,
+                        });
                         if self.current_card >= self.cards.len() && !self.cards.is_empty() {
                             self.current_card = self.cards.len() - 1;
                         }
@@ -94,19 +114,31 @@ impl App {
                 }
             }
             KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('k') => {
+                self.status = None;
                 if self.cards.is_empty() {
                     return;
                 }
                 if self.current_card > 0 {
                     self.current_card -= 1;
+                } else {
+                    self.status = Some(StatusMessage {
+                        text: "Already at first card".to_string(),
+                        kind: StatusKind::Info,
+                    });
                 }
             }
             KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('j') => {
+                self.status = None;
                 if self.cards.is_empty() {
                     return;
                 }
                 if self.current_card < (self.cards.len() - 1) {
                     self.current_card += 1;
+                } else {
+                    self.status = Some(StatusMessage {
+                        text: "Already at last card".to_string(),
+                        kind: StatusKind::Info,
+                    });
                 }
             }
             _ => {}
@@ -209,9 +241,14 @@ impl App {
                 ":".into(),
                 card.card.line.to_string().into(),
             ]));
-            if let Some(msg) = &self.status_message {
+            if let Some(status) = &self.status {
                 lines.push(Line::from(vec![]));
-                lines.push(Line::from(vec![msg.clone().red().bold()]));
+                let styled = match status.kind {
+                    StatusKind::Info => status.text.clone().yellow(),
+                    StatusKind::Success => status.text.clone().green(),
+                    StatusKind::Error => status.text.clone().red(),
+                };
+                lines.push(Line::from(vec![styled.bold()]));
             }
             Text::from(lines)
         };
@@ -340,7 +377,7 @@ mod tests {
         assert_eq!(app.cards.len(), 1);
         assert!(app.cards[0].leech);
         // Verify status message was set
-        assert!(app.status_message.is_some());
+        assert!(app.status.is_some());
     }
 
     #[test]
@@ -362,5 +399,41 @@ mod tests {
 
         // Card should be re-inserted after failed deletion
         assert_eq!(app.cards.len(), 1);
+        // Should show error status
+        assert!(app.status.is_some());
+    }
+
+    #[test]
+    fn test_successful_delete_status() {
+        let cards = vec![create_test_card()];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> = Box::new(|_| Ok(()));
+        let mut app = App::new(cards, delete_fn);
+
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('d'),
+            event::KeyModifiers::empty(),
+        ));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('y'),
+            event::KeyModifiers::empty(),
+        ));
+
+        assert_eq!(app.cards.len(), 0);
+        assert!(app.status.is_some());
+    }
+
+    #[test]
+    fn test_navigation_boundary_status() {
+        let cards = vec![create_test_card()];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> = Box::new(|_| Ok(()));
+        let mut app = App::new(cards, delete_fn);
+
+        // At first card, pressing left should show status
+        app.handle_key_event(KeyEvent::new(KeyCode::Left, event::KeyModifiers::empty()));
+        assert!(app.status.is_some());
+
+        // At last card, pressing right should show status
+        app.handle_key_event(KeyEvent::new(KeyCode::Right, event::KeyModifiers::empty()));
+        assert!(app.status.is_some());
     }
 }

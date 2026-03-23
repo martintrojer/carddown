@@ -19,6 +19,7 @@ struct UiState {
     help: bool,
     revealed: bool,
     started: Instant,
+    status_message: Option<String>,
 }
 
 pub struct ReviseConfig {
@@ -66,6 +67,7 @@ impl App {
                 help: false,
                 revealed: false,
                 started: Instant::now(),
+                status_message: None,
             },
         }
     }
@@ -87,6 +89,7 @@ impl App {
     fn handle_events(&mut self) -> io::Result<()> {
         if let Ok(true) = event::poll(Duration::from_secs(1)) {
             if self.is_session_expired() {
+                self.ui.status_message = Some("Session time limit reached".to_string());
                 self.exit();
             }
             match event::read()? {
@@ -103,6 +106,7 @@ impl App {
 
     fn update_state(&mut self, quality: Quality) {
         self.ui.revealed = false;
+        self.ui.status_message = None;
 
         if self.cards.is_empty() {
             return;
@@ -127,8 +131,9 @@ impl App {
                 .update_state(&quality, &mut card.state, &mut self.global_state);
 
             // Check if card should be marked as leech
-            if card.state.failed_count >= self.config.leech_threshold as u64 {
+            if !card.leech && card.state.failed_count >= self.config.leech_threshold as u64 {
                 card.leech = true;
+                self.ui.status_message = Some("Card marked as leech".to_string());
             }
         }
 
@@ -145,27 +150,38 @@ impl App {
                     self.exit();
                 }
             }
-            KeyCode::Char(' ') if !self.ui.help => self.ui.revealed = true,
+            KeyCode::Char(' ') if !self.ui.help => {
+                self.ui.revealed = true;
+                self.ui.status_message = None;
+            }
             KeyCode::Char('?') => self.ui.help = !self.ui.help,
             KeyCode::Char('0') | KeyCode::Char('a') if !self.ui.help => {
-                self.update_state(Quality::IncorrectAndForgotten)
+                self.try_grade(Quality::IncorrectAndForgotten)
             }
             KeyCode::Char('1') | KeyCode::Char('d') if !self.ui.help => {
-                self.update_state(Quality::IncorrectButRemembered)
+                self.try_grade(Quality::IncorrectButRemembered)
             }
             KeyCode::Char('2') | KeyCode::Char('g') if !self.ui.help => {
-                self.update_state(Quality::IncorrectButEasyToRecall)
+                self.try_grade(Quality::IncorrectButEasyToRecall)
             }
             KeyCode::Char('3') | KeyCode::Char('j') if !self.ui.help => {
-                self.update_state(Quality::CorrectWithDifficulty)
+                self.try_grade(Quality::CorrectWithDifficulty)
             }
             KeyCode::Char('4') | KeyCode::Char('l') if !self.ui.help => {
-                self.update_state(Quality::CorrectWithHesitation)
+                self.try_grade(Quality::CorrectWithHesitation)
             }
             KeyCode::Char('5') | KeyCode::Char('\'') if !self.ui.help => {
-                self.update_state(Quality::Perfect)
+                self.try_grade(Quality::Perfect)
             }
             _ => {}
+        }
+    }
+
+    fn try_grade(&mut self, quality: Quality) {
+        if self.ui.revealed {
+            self.update_state(quality);
+        } else {
+            self.ui.status_message = Some("Reveal the answer first".to_string());
         }
     }
 
@@ -345,6 +361,10 @@ impl App {
                 "Never",
             )
             .into()]));
+            if let Some(msg) = &self.ui.status_message {
+                lines.push(Line::from(vec![]));
+                lines.push(Line::from(vec![msg.clone().yellow().bold()]));
+            }
             Text::from(lines)
         };
 
@@ -411,6 +431,12 @@ mod tests {
             },
             Box::new(update_fn),
         )
+    }
+
+    /// Simulate pressing space to reveal, then a quality key
+    fn press_reveal_and_grade(app: &mut App, key: char) {
+        app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
+        app.handle_key_event(KeyEvent::new(KeyCode::Char(key), event::KeyModifiers::NONE));
     }
 
     fn refresh_global_state(state: &mut GlobalState) {
@@ -487,11 +513,11 @@ mod tests {
 
         // Process first card
         assert_eq!(app.ui.current_card, 0);
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
+        press_reveal_and_grade(&mut app, '5');
         assert_eq!(app.ui.current_card, 1);
 
         // Process second (last) card
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
+        press_reveal_and_grade(&mut app, '5');
         assert_eq!(app.ui.current_card, 2); // Will be at end of cards
 
         // One more update should trigger exit
@@ -532,12 +558,9 @@ mod tests {
         ];
 
         for ((num_key, letter_key), is_failure) in quality_keys.iter() {
-            // Test number key
+            // Test number key (must reveal first)
             let mut app = create_test_app();
-            app.handle_key_event(KeyEvent::new(
-                KeyCode::Char(*num_key),
-                event::KeyModifiers::NONE,
-            ));
+            press_reveal_and_grade(&mut app, *num_key);
             assert_eq!(app.ui.current_card, 1);
             if *is_failure {
                 assert_eq!(
@@ -551,12 +574,9 @@ mod tests {
                 );
             }
 
-            // Test letter key
+            // Test letter key (must reveal first)
             let mut app = create_test_app();
-            app.handle_key_event(KeyEvent::new(
-                KeyCode::Char(*letter_key),
-                event::KeyModifiers::NONE,
-            ));
+            press_reveal_and_grade(&mut app, *letter_key);
             assert_eq!(app.ui.current_card, 1);
             if *is_failure {
                 assert_eq!(
@@ -1043,5 +1063,44 @@ mod tests {
 
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
+    }
+
+    #[test]
+    fn test_grade_requires_reveal() {
+        let mut app = create_test_app();
+
+        // Grading without revealing should be blocked
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
+        assert_eq!(app.ui.current_card, 0, "should not advance without reveal");
+        assert!(
+            app.ui.status_message.is_some(),
+            "should show status message"
+        );
+
+        // After revealing, grading should work
+        app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
+        assert!(app.ui.revealed);
+        assert!(
+            app.ui.status_message.is_none(),
+            "reveal should clear status"
+        );
+
+        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
+        assert_eq!(app.ui.current_card, 1, "should advance after reveal+grade");
+    }
+
+    #[test]
+    fn test_leech_status_message() {
+        let mut app = create_test_app();
+
+        // Fail enough times to trigger leech
+        for _ in 0..3 {
+            app.ui.current_card = 0;
+            app.update_state(Quality::IncorrectAndForgotten);
+        }
+
+        assert!(app.cards[0].leech);
+        assert!(app.ui.status_message.is_some());
+        assert!(app.ui.status_message.as_ref().unwrap().contains("leech"));
     }
 }
