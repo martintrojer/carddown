@@ -2,36 +2,67 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Commands
+## Build & Run
 
-- `cargo build` - Build the project
-- `cargo test` - Run all tests
-- `cargo run -- scan <path>` - Extract flashcards from files/folders
-- `cargo run -- revise` - Start interactive study session
-- `cargo run -- audit` - Review orphaned/leech cards
-- `cargo install --path .` - Install locally
+```bash
+cargo build                          # debug build
+cargo test                           # run all tests (121 tests)
+cargo run -- scan <path>             # extract flashcards from files/folders
+cargo run -- revise                  # start interactive study session
+cargo run -- audit                   # review orphaned/leech cards
+cargo install --path .               # install locally
+```
 
-## Architecture Overview
+Debug logging: `RUST_LOG=debug cargo run -- scan <path>`
+
+## Before Committing
+
+Always run these before committing:
+
+```bash
+cargo fmt
+cargo clippy -- -D warnings
+```
+
+CI runs fmt check, clippy with `-D warnings`, and tests on both ubuntu and macos.
+
+## Architecture
 
 Carddown is a CLI flashcard system with spaced repetition that extracts cards from text files.
 
-**Core Data Flow:**
-1. Scan text files → Parse flashcards → Store in JSON database
-2. Revise session → Filter due cards → Present in TUI → Update statistics
-3. Audit mode → Show problematic cards → Allow cleanup
+**Data flow:**
 
-**Key Components:**
+```
+Scan: text files → parse_file() → Card structs → update_db() → cards.json
+Revise: cards.json → filter_cards() → revise::App TUI → update statistics
+Audit: cards.json → filter orphan/leech → audit::App TUI → delete cards
+```
 
-- **Card parsing** (`card.rs`): Extracts flashcards from markdown using content hashing (blake3) for identification. Supports single-line format `Question : Answer 🧠 #tag` and multi-line with `---`/`***` separators.
+**Module responsibilities:**
 
-- **Database** (`db.rs`): JSON-based storage in `~/.local/state/carddown/` tracking card metadata, review history, and statistics. Handles orphaned cards and leech detection.
+| Module | Role |
+|---|---|
+| `card.rs` | Parse flashcards from markdown. Single-line `Q : A 🧠 #tag` and multi-line with `---`/`***` separators. Cards identified by blake3 hash of content (survives file moves). |
+| `db.rs` | JSON-based storage in `~/.local/state/carddown/`. `atomic_write()` for safe updates. Tracks card metadata, review history, orphan/leech status. |
+| `algorithm/` | SM2, SM5, Simple8 spaced repetition. Quality grades 0-5 where 0-2 are failures. `CardState` tracks ease_factor, interval, repetitions, failed_count. |
+| `view/revise.rs` | Ratatui TUI for review sessions. `ReviseConfig` groups session params. Requires reveal before grading. Shows status messages for leech/expiry. |
+| `view/audit.rs` | Ratatui TUI for card cleanup. Colored status messages (success/error/info). Blocks leech deletion with feedback. |
+| `view/formatting.rs` | Shared formatting helpers. `format_tags()` returns sorted output for determinism. |
+| `main.rs` | CLI (clap), scan/revise/audit commands, `filter_cards()`, incremental scan index, lock mechanism. |
 
-- **Spaced repetition** (`algorithm/`): Implements SM2, SM5, and Simple8 algorithms with quality grades 0-5 where 0-2 are failures that reset progress.
+**Key design decisions:**
 
-- **Terminal UI** (`view/`): Interactive sessions built with `ratatui` and `crossterm` for reviewing (`revise.rs`) and auditing (`audit.rs`) cards.
+- **Content hashing for identity**: Cards are identified by blake3 hash of their content, not file path or line number. This means cards survive file moves and renames. Changing the hash input would silently orphan all existing cards — the `test_card_id_stability` test guards against this.
+- **Human-readable JSON storage**: `cards.json` and `state.json` are plain JSON, no binary formats. `atomic_write()` uses write-to-temp + rename for crash safety.
+- **Lock file prevents concurrent instances**: A lock file in the data directory prevents multiple carddown processes from corrupting the database. `--force` overrides.
+- **Incremental scanning**: `scan_index.json` tracks file mtimes. Only modified files are re-parsed unless `--full` is used.
+- **Reveal-before-grade invariant**: The revise TUI requires pressing space to reveal the answer before any quality grade (0-5) is accepted. `try_grade()` enforces this.
+- **Tag filtering happens before the TUI**: `filter_cards()` in `main.rs` handles tag/orphan/leech/interval filtering. The revise `App` receives pre-filtered cards.
+- **Reverse map computed at construction**: `reverse_probability` determines which cards show response-as-prompt. The `reverse_map` is computed once in `App::new()`, not per-interaction.
 
-**Important Patterns:**
-- Cards identified by content hash, survive file moves
-- Human-readable JSON storage, no binary formats
-- Lock mechanism prevents concurrent instances
-- Incremental scanning only checks modified files by default
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`): Lint (fmt + clippy), test (ubuntu + macos), coverage (codecov)
+- **Release** (`.github/workflows/release.yml`): Triggered by `v*` tags. Builds linux-x86_64 and macos-aarch64 binaries, creates GitHub release with tarballs.
+
+To release: bump version in `Cargo.toml`, commit, tag with `git tag -a v{version} -m "v{version}"`, push with `--tags`.
