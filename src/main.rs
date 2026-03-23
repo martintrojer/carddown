@@ -117,11 +117,11 @@ enum Commands {
     /// Start a flashcard review session
     Revise {
         /// Limit the number of cards to review in this session
-        #[arg(long, default_value_t = defaults::MAX_CARDS_PER_SESSION)]
+        #[arg(short = 'n', long, default_value_t = defaults::MAX_CARDS_PER_SESSION)]
         maximum_cards_per_session: usize,
 
         /// Maximum length of review session in minutes
-        #[arg(long, default_value_t = defaults::MAX_DURATION_MINUTES)]
+        #[arg(short = 'd', long, default_value_t = defaults::MAX_DURATION_MINUTES)]
         maximum_duration_of_session: usize,
 
         /// Number of failures before a card is marked as a leech
@@ -135,11 +135,11 @@ enum Commands {
         leech_method: LeechMethod,
 
         /// Spaced repetition algorithm to determine card intervals
-        #[arg(long, value_enum, default_value_t = Algo::SM5)]
+        #[arg(short = 'a', long, value_enum, default_value_t = Algo::SM5)]
         algorithm: Algo,
 
         /// Only show cards with these tags (shows all cards if no tags specified)
-        #[arg(long)]
+        #[arg(short = 't', long)]
         tag: Vec<String>,
 
         /// Include cards whose source files no longer exist
@@ -147,7 +147,7 @@ enum Commands {
         include_orphans: bool,
 
         /// Chance to swap question/answer (0.0 = never, 1.0 = always)
-        #[arg(long, default_value_t = defaults::REVERSE_PROBABILITY)]
+        #[arg(short = 'r', long, default_value_t = defaults::REVERSE_PROBABILITY)]
         reverse_probability: f64,
 
         /// Enable review of all cards not seen in --cram-hours, ignoring intervals
@@ -397,7 +397,21 @@ fn main() -> Result<()> {
             } else {
                 vec![]
             };
-            db::update_db(&vault.db_file, all_cards, full)?;
+            let stats = db::update_db(&vault.db_file, all_cards, full)?;
+            let mut parts = vec![format!("Found {} card(s)", stats.found)];
+            if stats.new > 0 {
+                parts.push(format!("{} new", stats.new));
+            }
+            if stats.updated > 0 {
+                parts.push(format!("{} updated", stats.updated));
+            }
+            if stats.orphaned > 0 {
+                parts.push(format!("{} orphaned", stats.orphaned));
+            }
+            if stats.unorphaned > 0 {
+                parts.push(format!("{} restored", stats.unorphaned));
+            }
+            println!("{}", parts.join(", "));
         }
         Commands::Audit {} => {
             let db = db::get_db(&vault.db_file)?;
@@ -434,12 +448,18 @@ fn main() -> Result<()> {
                 cram,
                 cram_hours,
             );
+            if cards.is_empty() {
+                println!("No cards due for review.");
+                return Ok(());
+            }
             cards.shuffle(&mut rand::rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
+            println!("{} card(s) due for review.", cards.len());
+            let total_cards = cards.len();
             let mut terminal = view::init()?;
             let db_file = vault.db_file.clone();
             let state_file = vault.state_file.clone();
-            let res = view::revise::App::new(
+            let mut app = view::revise::App::new(
                 new_algorithm(algorithm),
                 cards,
                 state,
@@ -456,10 +476,12 @@ fn main() -> Result<()> {
                     }
                     Ok(())
                 }),
-            )
-            .run(&mut terminal);
+            );
+            let res = app.run(&mut terminal);
+            let reviewed = app.cards_reviewed();
             view::restore()?;
-            res?
+            res?;
+            println!("Reviewed {reviewed}/{total_cards} card(s).")
         }
         Commands::Import { source } => {
             if !source.exists() {

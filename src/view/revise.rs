@@ -81,6 +81,10 @@ impl App {
         Ok(())
     }
 
+    pub fn cards_reviewed(&self) -> usize {
+        self.ui.current_card.min(self.cards.len())
+    }
+
     fn render_frame(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
     }

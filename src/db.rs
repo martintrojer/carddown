@@ -187,10 +187,24 @@ pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
 /// - Adds new cards that weren't in the database
 /// - Marks cards as orphaned (if `full` is true) if they're no longer found in the scan
 /// - Unmarks cards that were orphaned but are now found again
-pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<()> {
+pub struct ScanStats {
+    pub found: usize,
+    pub new: usize,
+    pub updated: usize,
+    pub orphaned: usize,
+    pub unorphaned: usize,
+}
+
+pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<ScanStats> {
     if found_cards.is_empty() {
         log::info!("No cards to add to db");
-        return Ok(());
+        return Ok(ScanStats {
+            found: 0,
+            new: 0,
+            updated: 0,
+            orphaned: 0,
+            unorphaned: 0,
+        });
     }
 
     let mut card_db: CardDb = if !db_path.exists() {
@@ -275,7 +289,15 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
         log::info!("Unorphaned {unorphan_ctr} cards");
     }
 
-    write_db(db_path, &card_db)
+    let found = found_ids.len();
+    write_db(db_path, &card_db)?;
+    Ok(ScanStats {
+        found,
+        new: new_ctr,
+        updated: updated_ctr,
+        orphaned: orphan_ctr,
+        unorphaned: unorphan_ctr,
+    })
 }
 
 #[cfg(test)]
