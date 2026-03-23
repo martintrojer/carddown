@@ -84,13 +84,13 @@ Navigate with arrow keys (`h`/`k` for left, `l`/`j` for right). Press `d` then `
 Merge review history from another carddown database into the current vault.
 
 ```bash
-carddown import ~/.local/state/carddown/cards.json   # migrate from pre-0.2.0
+carddown import ~/.local/state/carddown/cards.json   # migrate from pre-0.3.0
 carddown import ../other-vault/.carddown/cards.json   # merge from another vault
 ```
 
 Cards are matched by content hash. Only cards that exist in both databases are updated, and only if the source has more reviews than the target. This is safe to run multiple times.
 
-**Migrating from pre-0.2.0:** Older versions stored data globally in `~/.local/state/carddown/`. After scanning your notes with 0.2.0+ (which creates a local `.carddown/`), run `carddown import ~/.local/state/carddown/cards.json` to bring over your review history.
+**Migrating from pre-0.3.0:** Older versions stored data globally in `~/.local/state/carddown/`. After scanning your notes with 0.3.0+ (which creates a local `.carddown/`), run `carddown import ~/.local/state/carddown/cards.json` to bring over your review history.
 
 ### Global flags
 

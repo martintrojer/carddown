@@ -169,7 +169,7 @@ enum Commands {
     /// source cards.json into the current vault. Cards are matched by content
     /// hash — only cards that exist in both databases are updated.
     ///
-    /// Use this to migrate from an older carddown version (pre-0.2.0) that
+    /// Use this to migrate from an older carddown version (pre-0.3.0) that
     /// stored data globally in ~/.local/state/carddown/, or to merge review
     /// history when reorganising vaults.
     Import {
