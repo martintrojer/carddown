@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_card_updates() {
+    fn test_duplicate_card_update_last_wins() {
         let (file, _) = write_a_db(get_card_entries());
         let entries = get_card_entries();
 
@@ -494,10 +494,9 @@ mod tests {
         entry1.state.interval = 5;
         entry2.state.interval = 10;
 
-        // Update with both modifications
+        // Update with both modifications — last entry should win
         update_cards(file.path(), vec![entry1.clone(), entry2.clone()]).unwrap();
 
-        // Last update should win
         let read_db = get_db(file.path()).unwrap();
         assert_eq!(read_db.get(&entry1.card.id).unwrap().state.interval, 10);
     }
@@ -664,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_database_access() {
+    fn test_concurrent_database_reads_and_writes() {
         use std::sync::{Arc, Barrier};
         use std::thread;
         use tempfile::NamedTempFile;
@@ -687,21 +686,26 @@ mod tests {
                 barrier.wait();
 
                 // Each thread tries to read and then write
-                let result1 = get_db(&file_path);
-                let result2 = write_db(&file_path, &CardDb::new());
+                let read_result = get_db(&file_path);
+                let write_result = write_db(&file_path, &CardDb::new());
 
-                (result1.is_ok(), result2.is_ok())
+                (read_result.is_ok(), write_result.is_ok())
             });
 
             handles.push(handle);
         }
 
-        // Collect results - at least some operations should succeed
         let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
         let successful_reads = results.iter().filter(|(read, _)| *read).count();
         let successful_writes = results.iter().filter(|(_, write)| *write).count();
 
+        // All reads should succeed (reading is non-destructive)
         assert_eq!(successful_reads, 4);
+        // At least some writes should succeed
         assert!(successful_writes > 0);
+
+        // Database should still be valid and readable after concurrent access
+        let db = get_db(&file_path).unwrap();
+        assert!(db.is_empty());
     }
 }

@@ -536,31 +536,52 @@ mod tests {
     fn test_quality_inputs() {
         // Test all quality inputs with both number and letter keys
         let quality_keys = [
-            (('0', 'a'), Quality::IncorrectAndForgotten),
-            (('1', 'd'), Quality::IncorrectButRemembered),
-            (('2', 'g'), Quality::IncorrectButEasyToRecall),
-            (('3', 'j'), Quality::CorrectWithDifficulty),
-            (('4', 'l'), Quality::CorrectWithHesitation),
-            (('5', '\''), Quality::Perfect),
+            (('0', 'a'), true),   // failure: should increment failed_count
+            (('1', 'd'), true),   // failure
+            (('2', 'g'), true),   // failure
+            (('3', 'j'), false),  // success: should not increment failed_count
+            (('4', 'l'), false),  // success
+            (('5', '\''), false), // success
         ];
 
-        for ((num_key, letter_key), _expected_quality) in quality_keys.iter() {
-            let mut app = create_test_app();
-
+        for ((num_key, letter_key), is_failure) in quality_keys.iter() {
             // Test number key
+            let mut app = create_test_app();
             app.handle_key_event(KeyEvent::new(
                 KeyCode::Char(*num_key),
                 event::KeyModifiers::NONE,
             ));
             assert_eq!(app.ui.current_card, 1);
+            if *is_failure {
+                assert_eq!(
+                    app.cards[0].state.failed_count, 1,
+                    "key '{num_key}' should be a failure"
+                );
+            } else {
+                assert_eq!(
+                    app.cards[0].state.failed_count, 0,
+                    "key '{num_key}' should be a success"
+                );
+            }
 
-            // Reset and test letter key
-            app = create_test_app();
+            // Test letter key
+            let mut app = create_test_app();
             app.handle_key_event(KeyEvent::new(
                 KeyCode::Char(*letter_key),
                 event::KeyModifiers::NONE,
             ));
             assert_eq!(app.ui.current_card, 1);
+            if *is_failure {
+                assert_eq!(
+                    app.cards[0].state.failed_count, 1,
+                    "key '{letter_key}' should be a failure"
+                );
+            } else {
+                assert_eq!(
+                    app.cards[0].state.failed_count, 0,
+                    "key '{letter_key}' should be a success"
+                );
+            }
         }
     }
 
@@ -623,16 +644,73 @@ mod tests {
 
     #[test]
     fn test_reverse_probability() {
-        let mut app = create_test_app();
-        app.reverse_probability = 1.0; // Always reverse
+        // reverse_map is computed at construction time, so we must set
+        // reverse_probability before creating the App
+        let algorithm = new_algorithm(Algo::SM2);
+        let card = Card {
+            id: blake3::hash(b"test"),
+            file: PathBuf::from("test.md"),
+            line: 0,
+            prompt: "test prompt".to_string(),
+            response: vec!["test response".to_string()],
+            tags: HashSet::new(),
+        };
+        let cards = vec![CardEntry {
+            added: chrono::Utc::now(),
+            card,
+            last_revised: None,
+            revise_count: 0,
+            state: Default::default(),
+            leech: false,
+            orphan: false,
+        }];
+        fn update_fn(_cards: Vec<CardEntry>, _state: &GlobalState) -> Result<()> {
+            Ok(())
+        }
+        let app = App::new(
+            algorithm,
+            cards,
+            GlobalState::default(),
+            3,
+            3600,
+            1.0, // Always reverse
+            vec![],
+            Box::new(update_fn),
+        );
 
-        // Should still work with reversed cards
-        app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
-        assert!(app.ui.revealed);
+        // With probability 1.0, all cards should be reversed
+        assert!(app.reverse_map[0]);
 
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
-        assert!(!app.ui.revealed);
-        assert_eq!(app.ui.current_card, 1);
+        // Verify a 0.0 probability produces no reversals
+        let algorithm = new_algorithm(Algo::SM2);
+        let card = Card {
+            id: blake3::hash(b"test"),
+            file: PathBuf::from("test.md"),
+            line: 0,
+            prompt: "test prompt".to_string(),
+            response: vec!["test response".to_string()],
+            tags: HashSet::new(),
+        };
+        let cards = vec![CardEntry {
+            added: chrono::Utc::now(),
+            card,
+            last_revised: None,
+            revise_count: 0,
+            state: Default::default(),
+            leech: false,
+            orphan: false,
+        }];
+        let app = App::new(
+            algorithm,
+            cards,
+            GlobalState::default(),
+            3,
+            3600,
+            0.0, // Never reverse
+            vec![],
+            Box::new(update_fn),
+        );
+        assert!(!app.reverse_map[0]);
     }
 
     #[test]
@@ -712,31 +790,16 @@ mod tests {
     }
 
     #[test]
-    fn test_tag_filtering() {
+    fn test_revise_with_tagged_cards() {
         let mut app = create_test_app();
-
-        // Add a card with a tag
         app.cards[0].card.tags.insert("test_tag".to_string());
 
-        // Set tag filter
-        app.tags = vec!["test_tag".to_string()];
-
-        // Should still be able to review cards with matching tags
+        // Cards with tags should be reviewable
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
 
-        // Add a card without the tag
-        let mut untagged_card = app.cards[0].clone();
-        untagged_card.card.tags.clear();
-        app.cards.push(untagged_card);
-
-        // Process first card
         app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
         assert_eq!(app.ui.current_card, 1);
-
-        // Process second card
-        app.handle_key_event(KeyEvent::new(KeyCode::Char('5'), event::KeyModifiers::NONE));
-        assert_eq!(app.ui.current_card, 2); // Will be at end of cards
 
         // One more update should trigger exit
         app.update_state(Quality::Perfect);
@@ -847,13 +910,12 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_tags() {
+    fn test_revise_with_multiple_tags() {
         let mut app = create_test_app();
         app.cards[0].card.tags.insert("tag1".to_string());
         app.cards[0].card.tags.insert("tag2".to_string());
 
-        // Should handle multiple tags
-        app.tags = vec!["tag1".to_string()];
+        // Cards with multiple tags should be reviewable
         app.handle_key_event(KeyEvent::new(KeyCode::Char(' '), event::KeyModifiers::NONE));
         assert!(app.ui.revealed);
     }

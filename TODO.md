@@ -14,21 +14,6 @@
 
 ## Test Issues
 
-### Critical -- False Confidence
-
-- [ ] `test_card` (`card.rs:253`) -- asserts values it just assigned; tests nothing about application behavior
-- [ ] `test_reverse_probability` (`revise.rs:633`) -- sets `reverse_probability` after construction so `reverse_map` is already computed with `0.0`; doesn't test reversal
-- [ ] `test_tag_filtering` / `test_multiple_tags` (`revise.rs:723, 858`) -- set `app.tags` after construction but filtering happens in `filter_cards` before cards reach App
-- [ ] `test_concurrent_database_access` (`db.rs:662`) -- only asserts "at least one write succeeded"; doesn't detect corruption or lost writes
-- [ ] `test_concurrent_card_updates` (`db.rs:481`) -- named "concurrent" but tests sequential HashMap insertion
-
-### Recommended -- Coverage Gaps
-
-- [ ] Add card content hash stability tests -- pin expected blake3 hashes to detect silent orphaning on refactors
-- [ ] Add tests for `formatting.rs` -- currently zero tests; `format_tags` output is nondeterministic from HashSet
-- [ ] Fix `test_quality_inputs` (`revise.rs:544`) -- `_expected_quality` is unused; pressing '0' and '5' produce identical results
-- [ ] Add property-based algorithm tests verifying monotonic interval growth across quality grades
-
 ### Suggestions
 
 - [ ] Extract shared test helpers into a `test_utils` module to reduce duplication across `main.rs`, `db.rs`, `audit.rs`, `revise.rs`
@@ -37,3 +22,4 @@
 - [ ] Remove near-duplicate revise.rs tests (`test_update_state_quality` ~ `test_card_state_updates`, etc.)
 - [ ] Add edge case tests for prompts/answers containing `#`, `:`, or the brain emoji in non-marker positions
 - [ ] Add test for audit deletion error recovery path (when `delete_fn` returns `Err`)
+- [ ] Add property-based algorithm tests verifying monotonic interval growth across quality grades

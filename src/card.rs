@@ -249,18 +249,26 @@ mod tests {
     }
 
     #[test]
-    fn test_card() {
-        let card = Card {
-            id: blake3::hash(b"test"),
-            file: PathBuf::from("test.rs"),
-            line: 42,
-            tags: HashSet::new(),
-            prompt: "What is the answer to life, the universe, and everything?".to_string(),
-            response: vec!["42".to_string()],
-        };
-        assert_eq!(card.file.to_str(), Some("test.rs"));
-        assert_eq!(card.line, 42);
-        assert_eq!(card.id.to_string().len(), 64);
+    fn test_card_id_stability() {
+        // Card IDs are blake3 hashes of content. Changing the hash input
+        // would silently orphan all existing cards in user databases.
+        let file = new_md_file().unwrap();
+
+        // Single-line card: hashes strip_tags(line) = "Q1: A1"
+        std::fs::write(file.path(), "Q1: A1 #flashcard\n").unwrap();
+        let cards = parse_file(file.path()).unwrap();
+        assert_eq!(
+            cards[0].id.to_hex().as_str(),
+            blake3::hash(b"Q1: A1").to_hex().as_str()
+        );
+
+        // Multi-line card: hashes joined card lines "Q1\nA1"
+        std::fs::write(file.path(), "Q1 #flashcard\nA1\n---\n").unwrap();
+        let cards = parse_file(file.path()).unwrap();
+        assert_eq!(
+            cards[0].id.to_hex().as_str(),
+            blake3::hash(b"Q1\nA1").to_hex().as_str()
+        );
     }
 
     #[test]
