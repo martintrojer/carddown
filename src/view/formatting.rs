@@ -25,4 +25,3 @@ pub fn format_tags(tags: &HashSet<String>) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-

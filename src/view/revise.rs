@@ -88,7 +88,7 @@ impl App {
     /// updates the application's state based on user input
     fn handle_events(&mut self) -> io::Result<()> {
         if let Ok(true) = event::poll(Duration::from_secs(1)) {
-            if self.ui.started.elapsed().as_secs() >= self.max_duration as u64 {
+            if self.is_session_expired() {
                 self.exit();
             }
             match event::read()? {
@@ -105,35 +105,35 @@ impl App {
 
     fn update_state(&mut self, quality: Quality) {
         self.ui.revealed = false;
-        
+
         if self.cards.is_empty() {
             return;
         }
-        
+
         let current_card = self.ui.current_card;
-        
+
         // Check if we've reached the end of the card list
         if current_card >= self.cards.len() {
             self.exit();
             return;
         }
-        
+
         // Update global statistics
         update_meanq(&mut self.global_state, quality);
-        
+
         // Update the current card's state
         if let Some(card) = self.cards.get_mut(current_card) {
             card.last_revised = Some(chrono::Utc::now());
             card.revise_count += 1;
             self.algorithm
                 .update_state(&quality, &mut card.state, &mut self.global_state);
-            
+
             // Check if card should be marked as leech
             if card.state.failed_count >= self.leech_threshold as u64 {
                 card.leech = true;
             }
         }
-        
+
         // Move to next card
         self.ui.current_card += 1;
     }
@@ -169,6 +169,10 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn is_session_expired(&self) -> bool {
+        self.ui.started.elapsed().as_secs() >= self.max_duration as u64 * 60
     }
 
     fn exit(&mut self) {
@@ -591,12 +595,20 @@ mod tests {
     fn test_max_duration() {
         let mut app = create_test_app();
         app.max_duration = 0; // Set to 0 to test immediate timeout
+        assert!(app.is_session_expired());
+    }
 
-        // Simulate event poll after duration
-        if let Ok(true) = event::poll(Duration::from_secs(1)) {
-            app.handle_events().unwrap();
-            assert!(app.ui.exit);
-        }
+    #[test]
+    fn test_max_duration_uses_minutes() {
+        let mut app = create_test_app();
+        // Set duration to 1 minute; session just started so elapsed ~0 seconds
+        app.max_duration = 1;
+        // Should NOT be expired — 1 minute has not passed
+        assert!(!app.is_session_expired());
+
+        // With max_duration = 20 (default), a freshly started session should not expire
+        app.max_duration = 20;
+        assert!(!app.is_session_expired());
     }
 
     #[test]
