@@ -15,7 +15,8 @@ Study facts embedded in your markdown notes, tracked by content hash so cards su
 Pre-built binaries on the [releases page](https://github.com/martintrojer/carddown/releases), or:
 
 ```bash
-cargo install carddown
+mise use github:martintrojer/carddown  # mise
+cargo install carddown                 # cargo
 ```
 
 ## Quick start
