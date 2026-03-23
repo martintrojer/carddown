@@ -44,11 +44,9 @@ fn atomic_write(path: &Path, content: &str) -> Result<()> {
         )
     })?;
 
-    drop(temp_file);
-
     Ok(())
 }
-// Clone for tests
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardEntry {
     pub added: DateTime<Utc>,
@@ -183,11 +181,6 @@ pub fn update_cards(db_path: &Path, cards: Vec<CardEntry>) -> Result<()> {
     write_db(db_path, &card_db)
 }
 
-/// Get all card IDs from the database
-fn existing_ids(card_db: &CardDb) -> HashSet<blake3::Hash> {
-    card_db.keys().cloned().collect()
-}
-
 /// Update the database with newly scanned cards.
 ///
 /// - Updates existing cards if their content has changed
@@ -218,8 +211,12 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
     let mut updated_ctr = 0;
 
     // Update existing cards
-    let existing_ids_set = existing_ids(&card_db);
-    for id in existing_ids_set.intersection(&found_ids) {
+    let common_ids: Vec<_> = found_ids
+        .iter()
+        .filter(|id| card_db.contains_key(id))
+        .cloned()
+        .collect();
+    for id in &common_ids {
         let mut entry = card_db.remove(id).unwrap();
         let new = found_card_db.remove(id).unwrap();
         if entry.card != new.card {
@@ -234,16 +231,24 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<(
     }
 
     // Add new cards
-    let current_existing_ids = existing_ids(&card_db);
-    for id in found_ids.difference(&current_existing_ids) {
+    let new_ids: Vec<_> = found_ids
+        .iter()
+        .filter(|id| !card_db.contains_key(id))
+        .cloned()
+        .collect();
+    for id in &new_ids {
         card_db.insert(*id, found_card_db.remove(id).unwrap());
         new_ctr += 1;
     }
 
     // Mark orphaned cards (only in full scan mode)
     if full {
-        let final_existing_ids = existing_ids(&card_db);
-        for id in final_existing_ids.difference(&found_ids) {
+        let orphan_ids: Vec<_> = card_db
+            .keys()
+            .filter(|id| !found_ids.contains(id))
+            .cloned()
+            .collect();
+        for id in &orphan_ids {
             if let Some(entry) = card_db.get_mut(id) {
                 entry.orphan = true;
             }

@@ -40,7 +40,6 @@ impl Quality {
 
 // repetitions -> ease_factor -> optimal_factor
 pub type OptimalFactorMatrix = HashMap<u64, HashMap<OrderedFloat<f64>, f64>>;
-// Clone for tests
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardState {
     // The ease factor is used to determine the number of days to wait before reviewing again
@@ -90,7 +89,7 @@ pub fn update_meanq(global: &mut GlobalState, quality: Quality) {
     global.mean_q = Some(if let Some(mean_q) = global.mean_q {
         (total * mean_q + q) / (total + 1.0)
     } else {
-        (quality as usize) as f64
+        q
     });
 }
 

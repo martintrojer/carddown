@@ -164,7 +164,8 @@ impl App {
 
         let counter_text = if self.cards.is_empty() || self.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to audit".into()])])
-        } else if let Some(card) = self.cards.get(self.current_card) {
+        } else {
+            let card = &self.cards[self.current_card];
             let mut lines: Vec<Line> = vec![];
             lines.push(if card.orphan {
                 Line::from(vec!["Orphan".yellow().bold()])
@@ -205,8 +206,6 @@ impl App {
                 card.card.line.to_string().into(),
             ]));
             Text::from(lines)
-        } else {
-            Text::from(vec![Line::from(vec!["No cards to audit".into()])])
         };
 
         (block, counter_text)

@@ -9,10 +9,9 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 static ONE_LINE_CARD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(.*):(.*)").unwrap());
-static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(#[\w-]+)*").unwrap());
-static END_OF_CARD_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(\s*\-\-\-\s*|\s*\-\s*\-\s*\-\s*|\s*\*\*\*\s*|\s*\*\s*\*\s*\*\s*)$").unwrap()
-});
+static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#[\w-]+").unwrap());
+static END_OF_CARD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(-\s*-\s*-|\*\s*\*\s*\*)\s*$").unwrap());
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct Card {
@@ -34,7 +33,7 @@ fn parse_tags(line: &str) -> HashSet<String> {
         .collect()
 }
 
-fn strip_tags(line: &str) -> Result<String> {
+fn strip_tags(line: &str) -> String {
     // Preserve in-text '#' (e.g., "C#", "#1") and only strip from the first
     // tag/marker segment onward. Prefer the brain marker, then a space+'#',
     // then "#flashcard" as a fallback.
@@ -43,7 +42,7 @@ fn strip_tags(line: &str) -> Result<String> {
         .or_else(|| line.find(" #"))
         .or_else(|| line.find("#flashcard"))
         .unwrap_or(line.len());
-    Ok(line[..cut_idx].trim().to_string())
+    line[..cut_idx].trim().to_string()
 }
 
 #[derive(Debug, Default)]
@@ -84,16 +83,16 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
                 let full_answer = caps.get(2).context("error parsing card answer")?.as_str();
                 let tags = parse_tags(full_answer);
                 cards.push(Card {
-                    id: blake3::hash(strip_tags(line)?.as_bytes()),
+                    id: blake3::hash(strip_tags(line).as_bytes()),
                     file: PathBuf::from(file),
                     line: line_number as u64,
                     prompt: prompt.to_string(),
-                    response: vec![strip_tags(full_answer)?.to_string()],
+                    response: vec![strip_tags(full_answer).to_string()],
                     tags,
                 });
                 state = ParseState::default();
             } else if line.contains("#flashcard") {
-                let prompt = strip_tags(line)?;
+                let prompt = strip_tags(line);
                 if prompt.is_empty() {
                     continue;
                 }
@@ -226,14 +225,14 @@ mod tests {
     fn test_strip_tags() {
         let line =
             "What is the answer to life, the universe, and everything? #flashcard #foo #test";
-        let prompt = strip_tags(line).unwrap();
+        let prompt = strip_tags(line);
         assert_eq!(
             prompt,
             "What is the answer to life, the universe, and everything?"
         );
 
         let line = "What is the answer to life, the universe, and everything? 🧠 #foo #test";
-        let prompt = strip_tags(line).unwrap();
+        let prompt = strip_tags(line);
         assert_eq!(
             prompt,
             "What is the answer to life, the universe, and everything?"
@@ -432,7 +431,7 @@ Q4: A4 #flashcard";
     #[test]
     fn test_strip_tags_whitespace() {
         let line = "  What is the answer?  #flashcard";
-        let prompt = strip_tags(line).unwrap();
+        let prompt = strip_tags(line);
         assert_eq!(prompt, "What is the answer?");
     }
 }

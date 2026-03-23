@@ -15,7 +15,7 @@ use rand::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
@@ -102,8 +102,13 @@ fn load_scan_index() -> ScanIndex {
 }
 
 fn save_scan_index(index: &ScanIndex) {
-    if let Ok(json) = serde_json::to_string(index) {
-        let _ = std::fs::write(&PATHS.scan_index_file, json);
+    match serde_json::to_string(index) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&PATHS.scan_index_file, json) {
+                log::warn!("Failed to write scan index: {e}");
+            }
+        }
+        Err(e) => log::warn!("Failed to serialize scan index: {e}"),
     }
 }
 
@@ -223,7 +228,7 @@ fn file_types_to_set(file_types: &[String]) -> HashSet<&str> {
 ///
 /// Recursively walks the directory tree and returns all files whose
 /// extension matches one of the provided file types.
-fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
+fn collect_files(folder: &Path, file_types: &HashSet<&str>) -> Vec<PathBuf> {
     WalkDir::new(folder)
         .into_iter()
         .filter_map(Result::ok)
@@ -240,7 +245,7 @@ fn collect_files(folder: &PathBuf, file_types: &HashSet<&str>) -> Vec<PathBuf> {
 
 // walk file tree and parse all files
 #[cfg(test)]
-fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Vec<Card>> {
+fn parse_cards_from_folder(folder: &Path, file_types: &[String]) -> Result<Vec<Card>> {
     let file_types_set = file_types_to_set(file_types);
     collect_files(folder, &file_types_set)
         .into_iter()
@@ -251,7 +256,6 @@ fn parse_cards_from_folder(folder: &PathBuf, file_types: &[String]) -> Result<Ve
         })
 }
 
-/// Filter cards based on various criteria for review sessions.
 /// Filter cards based on various criteria for review sessions.
 ///
 /// Returns cards that:
@@ -299,7 +303,7 @@ fn is_card_due(
 /// Check if a card matches the specified tags.
 /// Returns true if no tags are specified (all cards match) or if the card has any matching tag.
 fn matches_tags(card: &CardEntry, tags: &HashSet<String>) -> bool {
-    tags.is_empty() || card.card.tags.intersection(tags).next().is_some()
+    tags.is_empty() || !card.card.tags.is_disjoint(tags)
 }
 
 /// Check if a leech card should be skipped based on the leech method.
@@ -332,34 +336,30 @@ fn main() -> Result<()> {
                 let file_types_set = file_types_to_set(&file_types);
                 let mut index = load_scan_index();
                 let files = collect_files(&path, &file_types_set);
-                let mut to_scan: Vec<PathBuf> = Vec::new();
-                if full {
-                    to_scan = files.clone();
+                let to_scan: Vec<PathBuf> = if full {
+                    files
                 } else {
+                    let mut modified = Vec::new();
                     for f in files.iter() {
                         let m = mtime_secs(f).unwrap_or(0);
                         let key = f.to_string_lossy().to_string();
                         if index.get(&key).copied().unwrap_or(0) < m {
-                            to_scan.push(f.clone());
+                            modified.push(f.clone());
                         }
-                        // Update index with current mtime so next run can skip
                         index.insert(key, m);
                     }
-                }
-                // If not full and nothing changed, short-circuit
-                if !full && to_scan.is_empty() {
-                    log::info!("No modified files detected; skipping scan");
-                    save_scan_index(&index); // Still save index even if nothing changed
-                    return Ok(());
-                }
-                // Parse selected files
-                let files_to_parse = if full { &files } else { &to_scan };
+                    if modified.is_empty() {
+                        log::info!("No modified files detected; skipping scan");
+                        save_scan_index(&index);
+                        return Ok(());
+                    }
+                    modified
+                };
                 let mut acc: Vec<Card> = Vec::new();
-                for f in files_to_parse {
+                for f in &to_scan {
                     let mut cs = card::parse_file(f)?;
                     acc.append(&mut cs);
                 }
-                // Save index for future incremental scans
                 save_scan_index(&index);
                 acc
             } else if path.is_file() {

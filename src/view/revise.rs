@@ -298,15 +298,7 @@ impl App {
         let counter_text = if self.cards.is_empty() || self.ui.current_card >= self.cards.len() {
             Text::from(vec![Line::from(vec!["No cards to revise".into()])])
         } else {
-            let card = match self.cards.get(self.ui.current_card) {
-                Some(card) => card,
-                None => {
-                    return (
-                        block,
-                        Text::from(vec![Line::from(vec!["Card index out of bounds".into()])]),
-                    );
-                }
-            };
+            let card = &self.cards[self.ui.current_card];
             let mut lines: Vec<Line> = Vec::new();
             lines.push(if card.leech {
                 Line::from(vec!["Leech Card".red().bold()])
@@ -599,16 +591,16 @@ mod tests {
     }
 
     #[test]
-    fn test_max_duration_uses_minutes() {
+    fn test_max_duration_uses_minutes_not_seconds() {
         let mut app = create_test_app();
-        // Set duration to 1 minute; session just started so elapsed ~0 seconds
-        app.max_duration = 1;
-        // Should NOT be expired — 1 minute has not passed
+        app.max_duration = 1; // 1 minute
+                              // Simulate 30 seconds elapsed -- should NOT be expired
+        app.ui.started = Instant::now() - Duration::from_secs(30);
         assert!(!app.is_session_expired());
 
-        // With max_duration = 20 (default), a freshly started session should not expire
-        app.max_duration = 20;
-        assert!(!app.is_session_expired());
+        // Simulate 61 seconds elapsed -- SHOULD be expired
+        app.ui.started = Instant::now() - Duration::from_secs(61);
+        assert!(app.is_session_expired());
     }
 
     #[test]
