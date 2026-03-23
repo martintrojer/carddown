@@ -134,7 +134,7 @@ checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
 name = "carddown"
-version = "0.1.10"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "blake3",
