@@ -20,20 +20,20 @@ categories = ["command-line-utilities"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.98"
-blake3 = { version = "1.8.2", features = ["serde"] }
-chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.43", features = ["derive"] }
+anyhow = "1.0.102"
+blake3 = { version = "1.8.3", features = ["serde"] }
+chrono = { version = "0.4.44", features = ["serde"] }
+clap = { version = "4.6.0", features = ["derive"] }
 crossterm = "0.29.0"
-env_logger = "0.11.8"
-log = "0.4.27"
-ordered-float = { version = "5.0.0", features = ["serde"] }
+env_logger = "0.11.9"
+log = "0.4.29"
+ordered-float = { version = "5.1.0", features = ["serde"] }
 rand = "0.9.2"
 ratatui = "0.29.0"
-regex = "1.11.1"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
+regex = "1.12.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 walkdir = "2.5.0"
 
 [dev-dependencies]
-tempfile = "3.20.0"
+tempfile = "3.27.0"
