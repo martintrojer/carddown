@@ -448,12 +448,12 @@ fn main() -> Result<()> {
                 cram,
                 cram_hours,
             );
+            cards.shuffle(&mut rand::rng());
+            let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             if cards.is_empty() {
                 println!("No cards due for review.");
                 return Ok(());
             }
-            cards.shuffle(&mut rand::rng());
-            let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             println!("{} card(s) due for review.", cards.len());
             let total_cards = cards.len();
             let mut terminal = view::init()?;
@@ -504,17 +504,20 @@ mod tests {
 
     #[test]
     fn test_parse_cards_from_folder() {
-        let folder = PathBuf::from("tests");
+        let folder = PathBuf::from("tests/fixtures");
         let file_types = vec!["md".to_string()];
         let cards = parse_cards_from_folder(&folder, &file_types).unwrap();
-        assert!(!cards.is_empty());
-        assert!(cards.iter().any(|c| c.prompt.contains("first president")));
-        assert!(cards.iter().any(|c| c.prompt.contains("Bohr model")));
+        // 2 single-line + 2 multi-line = 4 (ignored.md is skipped)
+        assert_eq!(cards.len(), 4);
+        assert!(cards.iter().any(|c| c.prompt == "Capital of France?"));
+        assert!(cards.iter().any(|c| c.prompt == "Explain photosynthesis"));
+        // Verify ignored file was skipped
+        assert!(!cards.iter().any(|c| c.prompt.contains("ignored")));
     }
 
     #[test]
     fn test_parse_cards_from_folder_type_filter() {
-        let folder = PathBuf::from("tests");
+        let folder = PathBuf::from("tests/fixtures");
         let file_types = vec!["txt".to_string()];
         let cards = parse_cards_from_folder(&folder, &file_types).unwrap();
         assert!(cards.is_empty());
