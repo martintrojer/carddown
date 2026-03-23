@@ -222,3 +222,66 @@ fn test_vault_isolation() {
     let cards: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap();
     assert_eq!(cards.len(), 4);
 }
+
+#[test]
+fn test_scan_dry_run_does_not_write() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--dry-run", &vault_path])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[dry-run]"), "stdout: {stdout}");
+    assert!(stdout.contains("4 new"), "stdout: {stdout}");
+
+    // Database should NOT exist
+    let db_path = vault.path().join(".carddown/cards.json");
+    assert!(!db_path.exists(), "dry-run should not create database");
+}
+
+#[test]
+fn test_import_dry_run_does_not_write() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    // Scan first to create the database
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    // Create source with review history
+    let db_path = vault.path().join(".carddown/cards.json");
+    let source_path = vault.path().join("source.json");
+    let db_content = std::fs::read_to_string(&db_path).unwrap();
+    let mut cards: Vec<serde_json::Value> = serde_json::from_str(&db_content).unwrap();
+    for card in &mut cards {
+        card["revise_count"] = serde_json::json!(10);
+    }
+    std::fs::write(&source_path, serde_json::to_string(&cards).unwrap()).unwrap();
+
+    // Dry-run import
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["import", "--dry-run", &source_path.to_string_lossy()])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[dry-run]"), "stdout: {stdout}");
+
+    // Database should NOT have been modified
+    let result_content = std::fs::read_to_string(&db_path).unwrap();
+    let result_cards: Vec<serde_json::Value> = serde_json::from_str(&result_content).unwrap();
+    for card in &result_cards {
+        assert_eq!(
+            card["revise_count"], 0,
+            "dry-run should not modify database"
+        );
+    }
+}

@@ -107,6 +107,10 @@ enum Commands {
         #[arg(long)]
         full: bool,
 
+        /// Preview what would change without writing to the database
+        #[arg(long)]
+        dry_run: bool,
+
         /// Path to a file or directory to scan for flashcards
         path: PathBuf,
     },
@@ -171,6 +175,10 @@ enum Commands {
     Import {
         /// Path to the source cards.json file to import from
         source: PathBuf,
+
+        /// Preview what would be imported without writing to the database
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -302,7 +310,7 @@ fn resolve_vault(args: &Args) -> VaultPaths {
 ///
 /// Matches cards by content hash. Only updates cards that exist in both databases.
 /// Returns the number of cards updated.
-fn import_stats(source_path: &Path, target_path: &Path) -> Result<usize> {
+fn import_stats(source_path: &Path, target_path: &Path, dry_run: bool) -> Result<usize> {
     let source_db = db::get_db(source_path)?;
     let mut target_db = if target_path.exists() {
         db::get_db(target_path)?
@@ -325,7 +333,7 @@ fn import_stats(source_path: &Path, target_path: &Path) -> Result<usize> {
         }
     }
 
-    if updated > 0 {
+    if updated > 0 && !dry_run {
         db::write_db(target_path, &target_db)?;
     }
 
@@ -356,6 +364,7 @@ fn main() -> Result<()> {
         Commands::Scan {
             file_types,
             full,
+            dry_run,
             path,
         } => {
             let all_cards = if path.is_dir() {
@@ -376,7 +385,9 @@ fn main() -> Result<()> {
                     }
                     if modified.is_empty() {
                         log::info!("No modified files detected; skipping scan");
-                        save_scan_index(&vault.scan_index_file, &index);
+                        if !dry_run {
+                            save_scan_index(&vault.scan_index_file, &index);
+                        }
                         return Ok(());
                     }
                     modified
@@ -386,19 +397,24 @@ fn main() -> Result<()> {
                     let mut cs = card::parse_file(f)?;
                     acc.append(&mut cs);
                 }
-                save_scan_index(&vault.scan_index_file, &index);
+                if !dry_run {
+                    save_scan_index(&vault.scan_index_file, &index);
+                }
                 acc
             } else if path.is_file() {
-                let mut index = load_scan_index(&vault.scan_index_file);
-                let m = mtime_secs(&path).unwrap_or(0);
-                index.insert(path.to_string_lossy().to_string(), m);
-                save_scan_index(&vault.scan_index_file, &index);
+                if !dry_run {
+                    let mut index = load_scan_index(&vault.scan_index_file);
+                    let m = mtime_secs(&path).unwrap_or(0);
+                    index.insert(path.to_string_lossy().to_string(), m);
+                    save_scan_index(&vault.scan_index_file, &index);
+                }
                 card::parse_file(&path)?
             } else {
                 vec![]
             };
-            let stats = db::update_db(&vault.db_file, all_cards, full)?;
-            let mut parts = vec![format!("Found {} card(s)", stats.found)];
+            let stats = db::update_db(&vault.db_file, all_cards, full, dry_run)?;
+            let prefix = if dry_run { "[dry-run] " } else { "" };
+            let mut parts = vec![format!("{prefix}Found {} card(s)", stats.found)];
             if stats.new > 0 {
                 parts.push(format!("{} new", stats.new));
             }
@@ -483,13 +499,18 @@ fn main() -> Result<()> {
             res?;
             println!("Reviewed {reviewed}/{total_cards} card(s).")
         }
-        Commands::Import { source } => {
+        Commands::Import { source, dry_run } => {
             if !source.exists() {
                 anyhow::bail!("Source file not found: {}", source.display());
             }
-            let updated = import_stats(&source, &vault.db_file)?;
+            let updated = import_stats(&source, &vault.db_file, dry_run)?;
+            let prefix = if dry_run {
+                "[dry-run] Would import"
+            } else {
+                "Imported"
+            };
             println!(
-                "Imported review history for {updated} card(s) into {}",
+                "{prefix} review history for {updated} card(s) into {}",
                 vault.db_file.display()
             );
         }
@@ -710,7 +731,7 @@ mod tests {
         let target_db = get_card_db();
         db::write_db(target_file.path(), &target_db).unwrap();
 
-        let updated = import_stats(source_file.path(), target_file.path()).unwrap();
+        let updated = import_stats(source_file.path(), target_file.path(), false).unwrap();
         assert_eq!(updated, 1);
 
         // Verify stats were imported
@@ -743,7 +764,7 @@ mod tests {
             .revise_count = 5;
         db::write_db(target_file.path(), &target_db).unwrap();
 
-        let updated = import_stats(source_file.path(), target_file.path()).unwrap();
+        let updated = import_stats(source_file.path(), target_file.path(), false).unwrap();
         assert_eq!(updated, 0);
 
         // Verify target was not modified

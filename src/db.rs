@@ -195,7 +195,12 @@ pub struct ScanStats {
     pub unorphaned: usize,
 }
 
-pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<ScanStats> {
+pub fn update_db(
+    db_path: &Path,
+    found_cards: Vec<Card>,
+    full: bool,
+    dry_run: bool,
+) -> Result<ScanStats> {
     if found_cards.is_empty() {
         log::info!("No cards to add to db");
         return Ok(ScanStats {
@@ -290,7 +295,9 @@ pub fn update_db(db_path: &Path, found_cards: Vec<Card>, full: bool) -> Result<S
     }
 
     let found = found_ids.len();
-    write_db(db_path, &card_db)?;
+    if !dry_run {
+        write_db(db_path, &card_db)?;
+    }
     Ok(ScanStats {
         found,
         new: new_ctr,
@@ -430,7 +437,7 @@ mod tests {
         let (file, _) = write_a_db(get_card_entries());
         let mut entry = get_card_entries().pop().unwrap();
         entry.card.prompt = "new prompt".to_string();
-        update_db(file.path(), vec![entry.card.clone()], false).unwrap();
+        update_db(file.path(), vec![entry.card.clone()], false, false).unwrap();
         let read_db = get_db(file.path()).unwrap();
         assert_eq!(
             read_db.get(&entry.card.id).unwrap().card.prompt,
@@ -443,7 +450,7 @@ mod tests {
         let (file, _) = write_a_db(get_card_entries());
         let entry = get_card_entries().remove(0);
         assert!(entry.orphan);
-        update_db(file.path(), vec![entry.card.clone()], false).unwrap();
+        update_db(file.path(), vec![entry.card.clone()], false, false).unwrap();
         let read_db = get_db(file.path()).unwrap();
         assert!(!read_db.get(&entry.card.id).unwrap().orphan);
     }
@@ -461,7 +468,7 @@ mod tests {
             response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
-        update_db(file.path(), vec![card], true).unwrap();
+        update_db(file.path(), vec![card], true, false).unwrap();
         let read_db = get_db(file.path()).unwrap();
         assert!(read_db.get(&entry.card.id).unwrap().orphan);
     }
@@ -477,7 +484,7 @@ mod tests {
             response: vec!["new".to_string()],
             tags: HashSet::from(["new".to_string()]),
         };
-        update_db(file.path(), vec![card.clone()], false).unwrap();
+        update_db(file.path(), vec![card.clone()], false, false).unwrap();
         let read_db = get_db(file.path()).unwrap();
         db.insert(card.id, CardEntry::new(card));
         assert_eq!(db.len(), read_db.len());
@@ -496,7 +503,7 @@ mod tests {
         assert!(empty_db.is_empty());
 
         // Test updating empty DB
-        update_db(file.path(), vec![], true).unwrap();
+        update_db(file.path(), vec![], true, false).unwrap();
         assert!(get_db(file.path()).unwrap().is_empty());
 
         // Test deleting from empty DB
@@ -537,7 +544,7 @@ mod tests {
 
         // Add same card twice in single update
         let cards = vec![card.clone(), card.clone()];
-        update_db(file.path(), cards, true).unwrap();
+        update_db(file.path(), cards, true, false).unwrap();
 
         let read_db = get_db(file.path()).unwrap();
         assert_eq!(read_db.len(), 1); // Should only store one copy
