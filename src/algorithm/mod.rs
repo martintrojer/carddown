@@ -196,4 +196,44 @@ mod tests {
         let huge_value = u64::MAX as f64 + 1e10;
         assert_eq!(safe_f64_to_u64(huge_value), u64::MAX);
     }
+
+    #[test]
+    fn test_interval_monotonic_with_quality() {
+        // For all algorithms, higher quality should produce equal or higher
+        // intervals than lower quality, given the same starting state.
+        use crate::db::GlobalState;
+
+        let algos = [Algo::SM2, Algo::SM5, Algo::Simple8];
+        let qualities = [
+            Quality::IncorrectAndForgotten,
+            Quality::IncorrectButRemembered,
+            Quality::IncorrectButEasyToRecall,
+            Quality::CorrectWithDifficulty,
+            Quality::CorrectWithHesitation,
+            Quality::Perfect,
+        ];
+
+        for algo in &algos {
+            let mut intervals = vec![];
+            for quality in &qualities {
+                let alg = new_algorithm(algo.clone());
+                let mut state = CardState::default();
+                let mut global = GlobalState::default();
+                alg.update_state(quality, &mut state, &mut global);
+                intervals.push(state.interval);
+            }
+            // Intervals should be non-decreasing with increasing quality
+            for i in 1..intervals.len() {
+                assert!(
+                    intervals[i] >= intervals[i - 1],
+                    "{:?}: interval for {:?} ({}) < interval for {:?} ({})",
+                    algo,
+                    qualities[i],
+                    intervals[i],
+                    qualities[i - 1],
+                    intervals[i - 1]
+                );
+            }
+        }
+    }
 }

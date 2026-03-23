@@ -8,7 +8,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-static ONE_LINE_CARD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(.*):(.*)").unwrap());
+static ONE_LINE_CARD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(.+?)\s*:\s*(.+)").unwrap());
 static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#[\w-]+").unwrap());
 static END_OF_CARD_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*(-\s*-\s*-|\*\s*\*\s*\*)\s*$").unwrap());
@@ -441,5 +442,30 @@ Q4: A4 #flashcard";
         let line = "  What is the answer?  #flashcard";
         let prompt = strip_tags(line);
         assert_eq!(prompt, "What is the answer?");
+    }
+
+    #[test]
+    fn test_special_characters_in_cards() {
+        let file = new_md_file().unwrap();
+
+        // Colon in prompt (e.g., "What is C#?")
+        std::fs::write(file.path(), "What is C#?: A language #flashcard\n").unwrap();
+        let cards = parse_file(file.path()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].prompt, "What is C#?");
+        assert_eq!(cards[0].response, vec!["A language"]);
+
+        // Brain emoji used as marker
+        std::fs::write(file.path(), "Q1: A1 🧠 #tag\n").unwrap();
+        let cards = parse_file(file.path()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].prompt, "Q1");
+        assert_eq!(cards[0].response, vec!["A1"]);
+
+        // Multiple colons in line
+        std::fs::write(file.path(), "Time: 12:30 #flashcard\n").unwrap();
+        let cards = parse_file(file.path()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].prompt, "Time");
     }
 }

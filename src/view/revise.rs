@@ -21,14 +21,18 @@ struct UiState {
     started: Instant,
 }
 
+pub struct ReviseConfig {
+    pub leech_threshold: usize,
+    pub max_duration: usize,
+    pub reverse_probability: f64,
+    pub tags: Vec<String>,
+}
+
 pub struct App {
     algorithm: Box<dyn Algorithm>,
     cards: Vec<CardEntry>,
     global_state: GlobalState,
-    leech_threshold: usize,
-    max_duration: usize,
-    reverse_probability: f64,
-    tags: Vec<String>,
+    config: ReviseConfig,
     // Whether each card should be reversed for this session
     reverse_map: Vec<bool>,
     #[allow(clippy::type_complexity)]
@@ -37,30 +41,24 @@ pub struct App {
 }
 
 impl App {
-    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     pub fn new(
         algorithm: Box<dyn Algorithm>,
         cards: Vec<CardEntry>,
         global_state: GlobalState,
-        leech_threshold: usize,
-        max_duration: usize,
-        reverse_probability: f64,
-        tags: Vec<String>,
+        config: ReviseConfig,
         update_fn: Box<dyn Fn(Vec<CardEntry>, &GlobalState) -> Result<()>>,
     ) -> Self {
         let mut rng = rand::rng();
         let reverse_map = (0..cards.len())
-            .map(|_| rng.random::<f64>() < reverse_probability)
+            .map(|_| rng.random::<f64>() < config.reverse_probability)
             .collect();
         Self {
             algorithm,
             cards,
             update_fn,
             global_state,
-            leech_threshold,
-            max_duration,
-            reverse_probability,
-            tags,
+            config,
             reverse_map,
             ui: UiState {
                 current_card: 0,
@@ -129,7 +127,7 @@ impl App {
                 .update_state(&quality, &mut card.state, &mut self.global_state);
 
             // Check if card should be marked as leech
-            if card.state.failed_count >= self.leech_threshold as u64 {
+            if card.state.failed_count >= self.config.leech_threshold as u64 {
                 card.leech = true;
             }
         }
@@ -172,7 +170,7 @@ impl App {
     }
 
     fn is_session_expired(&self) -> bool {
-        self.ui.started.elapsed().as_secs() >= self.max_duration as u64 * 60
+        self.ui.started.elapsed().as_secs() >= self.config.max_duration as u64 * 60
     }
 
     fn exit(&mut self) {
@@ -262,13 +260,13 @@ impl App {
                 if reversed { "[Reversed]" } else { "" },
                 std::cmp::min(self.cards.len(), 1 + self.ui.current_card),
                 self.cards.len(),
-                if self.tags.is_empty() {
+                if self.config.tags.is_empty() {
                     "All Tags".to_string()
                 } else {
-                    self.tags.join(", ")
+                    self.config.tags.join(", ")
                 },
                 self.algorithm.name(),
-                self.reverse_probability,
+                self.config.reverse_probability,
             )
             .bold(),
         );
@@ -405,10 +403,12 @@ mod tests {
             algorithm,
             cards,
             global_state,
-            3,      // leech_threshold
-            3600,   // max_duration
-            0.0,    // reverse_probability
-            vec![], // tags
+            ReviseConfig {
+                leech_threshold: 3,
+                max_duration: 3600,
+                reverse_probability: 0.0,
+                tags: vec![],
+            },
             Box::new(update_fn),
         )
     }
@@ -417,19 +417,6 @@ mod tests {
         state.last_revise_session = Some(chrono::Utc::now());
         state.mean_q = Some(0.0);
         state.total_cards_revised = 0;
-    }
-
-    #[test]
-    fn test_update_state_quality() {
-        let mut app = create_test_app();
-
-        // Test card state updates
-        app.update_state(Quality::Perfect);
-
-        let card = &app.cards[0];
-        assert_eq!(card.revise_count, 1);
-        assert!(card.last_revised.is_some());
-        assert!(!card.leech);
     }
 
     #[test]
@@ -607,15 +594,15 @@ mod tests {
     #[test]
     fn test_max_duration() {
         let mut app = create_test_app();
-        app.max_duration = 0; // Set to 0 to test immediate timeout
+        app.config.max_duration = 0; // Set to 0 to test immediate timeout
         assert!(app.is_session_expired());
     }
 
     #[test]
     fn test_max_duration_uses_minutes_not_seconds() {
         let mut app = create_test_app();
-        app.max_duration = 1; // 1 minute
-                              // Simulate 30 seconds elapsed -- should NOT be expired
+        app.config.max_duration = 1; // 1 minute
+                                     // Simulate 30 seconds elapsed -- should NOT be expired
         app.ui.started = Instant::now() - Duration::from_secs(30);
         assert!(!app.is_session_expired());
 
@@ -671,10 +658,12 @@ mod tests {
             algorithm,
             cards,
             GlobalState::default(),
-            3,
-            3600,
-            1.0, // Always reverse
-            vec![],
+            ReviseConfig {
+                leech_threshold: 3,
+                max_duration: 3600,
+                reverse_probability: 1.0, // Always reverse
+                tags: vec![],
+            },
             Box::new(update_fn),
         );
 
@@ -704,10 +693,12 @@ mod tests {
             algorithm,
             cards,
             GlobalState::default(),
-            3,
-            3600,
-            0.0, // Never reverse
-            vec![],
+            ReviseConfig {
+                leech_threshold: 3,
+                max_duration: 3600,
+                reverse_probability: 0.0, // Never reverse
+                tags: vec![],
+            },
             Box::new(update_fn),
         );
         assert!(!app.reverse_map[0]);

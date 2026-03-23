@@ -16,6 +16,7 @@ pub struct App {
     current_card: usize,
     exit: bool,
     sure: bool,
+    status_message: Option<String>,
     delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>>,
 }
 
@@ -27,6 +28,7 @@ impl App {
             current_card: 0,
             exit: false,
             sure: false,
+            status_message: None,
         }
     }
 
@@ -64,17 +66,19 @@ impl App {
             KeyCode::Char('d') | KeyCode::Char('D') => {
                 if !self.cards.is_empty() {
                     self.sure = true;
+                    self.status_message = None;
                 }
             }
             KeyCode::Char('n') | KeyCode::Char('N') => {
                 self.sure = false;
+                self.status_message = None;
             }
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 if self.sure && !self.cards.is_empty() {
                     let card = self.cards.remove(self.current_card);
                     if card.leech {
-                        // Don't allow deletion of leech cards
                         log::warn!("Cannot delete leech card: {}", card.card.id);
+                        self.status_message = Some("Cannot delete leech cards".to_string());
                         self.cards.insert(self.current_card, card);
                     } else if let Err(e) = (self.delete_fn)(card.card.id) {
                         log::error!("Failed to delete card {}: {e}", card.card.id);
@@ -205,6 +209,10 @@ impl App {
                 ":".into(),
                 card.card.line.to_string().into(),
             ]));
+            if let Some(msg) = &self.status_message {
+                lines.push(Line::from(vec![]));
+                lines.push(Line::from(vec![msg.clone().red().bold()]));
+            }
             Text::from(lines)
         };
 
@@ -331,5 +339,28 @@ mod tests {
         // Verify leech card wasn't deleted
         assert_eq!(app.cards.len(), 1);
         assert!(app.cards[0].leech);
+        // Verify status message was set
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn test_delete_error_recovery() {
+        let cards = vec![create_test_card()];
+        let delete_fn: Box<dyn Fn(blake3::Hash) -> Result<()>> =
+            Box::new(|_| anyhow::bail!("disk error"));
+        let mut app = App::new(cards, delete_fn);
+
+        // Attempt delete with failing delete_fn
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('d'),
+            event::KeyModifiers::empty(),
+        ));
+        app.handle_key_event(KeyEvent::new(
+            KeyCode::Char('y'),
+            event::KeyModifiers::empty(),
+        ));
+
+        // Card should be re-inserted after failed deletion
+        assert_eq!(app.cards.len(), 1);
     }
 }

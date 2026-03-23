@@ -415,10 +415,12 @@ fn main() -> Result<()> {
                 new_algorithm(algorithm),
                 cards,
                 state,
-                leech_failure_threshold,
-                maximum_duration_of_session,
-                reverse_probability,
-                tags,
+                view::revise::ReviseConfig {
+                    leech_threshold: leech_failure_threshold,
+                    max_duration: maximum_duration_of_session,
+                    reverse_probability,
+                    tags,
+                },
                 Box::new(move |cards, state| {
                     // Dont update the database if we are in cram mode
                     if !cram {
