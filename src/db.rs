@@ -166,7 +166,7 @@ fn row_to_card_entry(row: &rusqlite::Row) -> rusqlite::Result<CardEntry> {
 
 pub fn get_db(db_path: &Path) -> Result<CardDb> {
     if !db_path.exists() {
-        log::info!("No db found, creating new one");
+        log::debug!("No db found, creating new one");
         return Ok(HashMap::new());
     }
     let conn = open_db(db_path)?;
@@ -273,7 +273,7 @@ pub fn update_db(
     dry_run: bool,
 ) -> Result<ScanStats> {
     if found_cards.is_empty() {
-        log::info!("No cards to add to db");
+        log::debug!("No cards to add to db");
         return Ok(ScanStats {
             found: 0,
             new: 0,
@@ -344,18 +344,18 @@ pub fn update_db(
     }
 
     if new_ctr == 0 {
-        log::info!("No new cards found");
+        log::debug!("No new cards found");
     } else {
-        log::info!("Inserted {new_ctr} new cards");
+        log::debug!("Inserted {new_ctr} new cards");
     }
     if updated_ctr > 0 {
-        log::info!("Updated {updated_ctr} cards");
+        log::debug!("Updated {updated_ctr} cards");
     }
     if orphan_ctr > 0 {
-        log::warn!("Found {orphan_ctr} orphaned cards");
+        log::debug!("Found {orphan_ctr} orphaned cards");
     }
     if unorphan_ctr > 0 {
-        log::info!("Unorphaned {unorphan_ctr} cards");
+        log::debug!("Unorphaned {unorphan_ctr} cards");
     }
 
     let found = found_ids.len();
@@ -375,7 +375,7 @@ pub fn update_db(
 
 pub fn get_global_state(db_path: &Path) -> Result<GlobalState> {
     if !db_path.exists() {
-        log::info!("No global state found, using default");
+        log::debug!("No global state found, using default");
         return Ok(GlobalState::default());
     }
     let conn = open_db(db_path)?;
@@ -414,7 +414,7 @@ pub fn refresh_global_state(state: &mut GlobalState) {
     let now = chrono::Utc::now();
     if let Some(last_session) = state.last_revise_session {
         if now - last_session > chrono::Duration::weeks(1) {
-            log::info!("Resetting mean_q and total_cards_revised");
+            log::debug!("Resetting mean_q and total_cards_revised");
             state.total_cards_revised = 0;
             state.mean_q = None;
         }

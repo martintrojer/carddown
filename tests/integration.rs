@@ -40,8 +40,8 @@ fn test_scan_creates_database() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Found 4 card(s)"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Found 4 card(s)"), "stderr: {stderr}");
 
     // Verify database was created
     assert!(db_path(&vault).exists());
@@ -86,8 +86,8 @@ fn test_scan_full_detects_orphans() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("orphaned"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("orphaned"), "stderr: {stderr}");
 }
 
 #[test]
@@ -107,10 +107,10 @@ fn test_revise_no_cards_due() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stdout.contains("No cards due") || stdout.contains("0 card(s)"),
-        "stdout: {stdout}"
+        stderr.contains("No cards due") || stderr.contains("0 card(s)"),
+        "stderr: {stderr}"
     );
 }
 
@@ -131,8 +131,8 @@ fn test_revise_with_tag_filter() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("No cards due"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("No cards due"), "stderr: {stderr}");
 }
 
 #[test]
@@ -171,8 +171,8 @@ fn test_import_from_json() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Imported"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Imported"), "stderr: {stderr}");
 }
 
 #[test]
@@ -201,8 +201,8 @@ fn test_import_from_sqlite() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("0 card(s)"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("0 card(s)"), "stderr: {stderr}");
 }
 
 #[test]
@@ -244,9 +244,9 @@ fn test_scan_dry_run_does_not_write() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("[dry-run]"), "stdout: {stdout}");
-    assert!(stdout.contains("4 new"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[dry-run]"), "stderr: {stderr}");
+    assert!(stderr.contains("4 new"), "stderr: {stderr}");
 
     assert!(
         !db_path(&vault).exists(),
@@ -286,8 +286,8 @@ fn test_import_dry_run_does_not_write() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("[dry-run]"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[dry-run]"), "stderr: {stderr}");
 
     // Verify db wasn't modified by exporting again
     let verify_dir = vault.path().join("verify");
@@ -324,8 +324,8 @@ fn test_export() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Exported 4 card(s)"), "stdout: {stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Exported 4 card(s)"), "stderr: {stderr}");
 
     assert!(export_dir.join("cards.json").exists());
     assert!(export_dir.join("state.json").exists());

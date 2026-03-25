@@ -61,6 +61,7 @@ Audit: cards.json → filter orphan/leech → audit::App TUI → delete cards
 - **Reveal-before-grade invariant**: The revise TUI requires pressing space to reveal the answer before any quality grade (0-5) is accepted. `try_grade()` enforces this.
 - **Tag filtering happens before the TUI**: `filter_cards()` in `main.rs` handles tag/orphan/leech/interval filtering. The revise `App` receives pre-filtered cards.
 - **Reverse map computed at construction**: `reverse_probability` determines which cards show response-as-prompt. The `reverse_map` is computed once in `App::new()`, not per-interaction.
+- **Output convention**: `stdout` is reserved for data output (export). All user-facing status messages (summaries, migration, warnings) go to `stderr`. `log::debug!` for developer tracing (`RUST_LOG=debug`). `log::warn!` only for unexpected internal errors (e.g., scan index write failures).
 
 ## CI/CD
 

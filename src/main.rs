@@ -330,7 +330,7 @@ fn import_stats(source_path: &Path, target_path: &Path, dry_run: bool) -> Result
 }
 
 fn main() -> Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     let args = Args::parse();
 
     let vault = resolve_vault(&args);
@@ -375,7 +375,7 @@ fn main() -> Result<()> {
                         index.insert(key, m);
                     }
                     if modified.is_empty() {
-                        log::info!("No modified files detected; skipping scan");
+                        eprintln!("No modified files detected; skipping scan.");
                         if !dry_run {
                             db::save_scan_index(&vault.db_path, &index);
                         }
@@ -418,7 +418,7 @@ fn main() -> Result<()> {
             if stats.unorphaned > 0 {
                 parts.push(format!("{} restored", stats.unorphaned));
             }
-            println!("{}", parts.join(", "));
+            eprintln!("{}", parts.join(", "));
         }
         Commands::Audit {} => {
             let db = db::get_db(&vault.db_path)?;
@@ -458,10 +458,10 @@ fn main() -> Result<()> {
             cards.shuffle(&mut rand::rng());
             let cards: Vec<_> = cards.into_iter().take(maximum_cards_per_session).collect();
             if cards.is_empty() {
-                println!("No cards due for review.");
+                eprintln!("No cards due for review.");
                 return Ok(());
             }
-            println!("{} card(s) due for review.", cards.len());
+            eprintln!("{} card(s) due for review.", cards.len());
             let total_cards = cards.len();
             let mut terminal = view::init()?;
             let db_path = vault.db_path.clone();
@@ -488,7 +488,7 @@ fn main() -> Result<()> {
             let reviewed = app.cards_reviewed();
             view::restore()?;
             res?;
-            println!("Reviewed {reviewed}/{total_cards} card(s).")
+            eprintln!("Reviewed {reviewed}/{total_cards} card(s).")
         }
         Commands::Import { source, dry_run } => {
             if !source.exists() {
@@ -500,7 +500,7 @@ fn main() -> Result<()> {
             } else {
                 "Imported"
             };
-            println!(
+            eprintln!(
                 "{prefix} review history for {updated} card(s) into {}",
                 vault.db_path.display()
             );
@@ -520,7 +520,7 @@ fn main() -> Result<()> {
             std::fs::write(&cards_path, cards_json)?;
             std::fs::write(&state_path, state_json)?;
 
-            println!("Exported {} card(s) to {}", db.len(), output_dir.display());
+            eprintln!("Exported {} card(s) to {}", db.len(), output_dir.display());
         }
     }
 

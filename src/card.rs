@@ -58,7 +58,7 @@ pub fn parse_file(file: &Path) -> Result<Vec<Card>> {
     let contents =
         fs::read_to_string(file).with_context(|| format!("Error reading `{}`", file.display()))?;
     if contents.contains("@carddown-ignore") {
-        log::info!("ignoring file: {}", file.display());
+        log::debug!("ignoring file: {}", file.display());
         return Ok(vec![]);
     }
     let mut cards = vec![];
