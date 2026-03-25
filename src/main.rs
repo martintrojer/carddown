@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use rand::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -58,8 +58,6 @@ impl Drop for LockGuard {
     }
 }
 
-type ScanIndex = HashMap<String, u64>; // file path -> mtime seconds
-
 /// Default values for command-line arguments
 mod defaults {
     pub const MAX_CARDS_PER_SESSION: usize = 30;
@@ -67,25 +65,6 @@ mod defaults {
     pub const LEECH_FAILURE_THRESHOLD: usize = 15;
     pub const CRAM_HOURS: usize = 12;
     pub const REVERSE_PROBABILITY: f64 = 0.0;
-}
-
-fn load_scan_index(path: &Path) -> ScanIndex {
-    if let Ok(data) = std::fs::read_to_string(path) {
-        serde_json::from_str(&data).unwrap_or_default()
-    } else {
-        HashMap::new()
-    }
-}
-
-fn save_scan_index(path: &Path, index: &ScanIndex) {
-    match serde_json::to_string(index) {
-        Ok(json) => {
-            if let Err(e) = std::fs::write(path, json) {
-                log::warn!("Failed to write scan index: {e}");
-            }
-        }
-        Err(e) => log::warn!("Failed to serialize scan index: {e}"),
-    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -165,20 +144,29 @@ enum Commands {
     },
     /// Import review history from another carddown database.
     ///
-    /// Merges card statistics (review count, intervals, leech status) from a
-    /// source cards.json into the current vault. Cards are matched by content
-    /// hash — only cards that exist in both databases are updated.
+    /// Accepts both SQLite (.db) and legacy JSON (.json) files as source.
+    /// Merges card statistics (review count, intervals, leech status) into
+    /// the current vault. Cards are matched by content hash — only cards
+    /// that exist in both databases are updated.
     ///
     /// Use this to migrate from an older carddown version (pre-0.3.0) that
     /// stored data globally in ~/.local/state/carddown/, or to merge review
     /// history when reorganising vaults.
     Import {
-        /// Path to the source cards.json file to import from
+        /// Path to the source database (.db or .json) to import from
         source: PathBuf,
 
         /// Preview what would be imported without writing to the database
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Export the current vault database to JSON format.
+    ///
+    /// Writes cards.json and state.json to the specified directory.
+    /// Useful for backup, migration, or interoperability with other tools.
+    Export {
+        /// Directory to write the exported JSON files to
+        output_dir: PathBuf,
     },
 }
 
@@ -186,9 +174,9 @@ enum Commands {
 /// Cards are extracted from text files and can be reviewed using spaced repetition.
 /// The system tracks review history and automatically schedules cards for optimal learning.
 ///
-/// Data is stored in a .carddown/ directory at the vault root (discovered by
-/// walking up from the current directory or scan path looking for .carddown/,
-/// .git/, .hg/, or .jj/).
+/// Data is stored in a .carddown/carddown.db SQLite database at the vault root
+/// (discovered by walking up from the current directory or scan path looking for
+/// .carddown/, .git/, .hg/, or .jj/). This file is safe to version control.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
@@ -289,8 +277,6 @@ fn should_skip_leech(card: &CardEntry, leech_method: LeechMethod) -> bool {
 }
 
 /// Resolve vault paths from CLI args.
-///
-/// Priority: `--vault` flag > scan path (for scan command) > cwd.
 fn resolve_vault(args: &Args) -> VaultPaths {
     if let Some(vault_path) = &args.vault {
         vault::find_vault_root(vault_path)
@@ -306,12 +292,17 @@ fn resolve_vault(args: &Args) -> VaultPaths {
     }
 }
 
+/// Load a CardDb from either a SQLite .db file or a legacy JSON file.
+fn load_source_db(path: &Path) -> Result<CardDb> {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("json") => db::load_json_cards(path),
+        _ => db::get_db(path),
+    }
+}
+
 /// Import review statistics from a source database into the target database.
-///
-/// Matches cards by content hash. Only updates cards that exist in both databases.
-/// Returns the number of cards updated.
 fn import_stats(source_path: &Path, target_path: &Path, dry_run: bool) -> Result<usize> {
-    let source_db = db::get_db(source_path)?;
+    let source_db = load_source_db(source_path)?;
     let mut target_db = if target_path.exists() {
         db::get_db(target_path)?
     } else {
@@ -321,8 +312,6 @@ fn import_stats(source_path: &Path, target_path: &Path, dry_run: bool) -> Result
     let mut updated = 0;
     for (id, source_entry) in &source_db {
         if let Some(target_entry) = target_db.get_mut(id) {
-            // Only update if source has review history and target doesn't,
-            // or source has more reviews
             if source_entry.revise_count > target_entry.revise_count {
                 target_entry.state = source_entry.state.clone();
                 target_entry.last_revised = source_entry.last_revised;
@@ -351,7 +340,6 @@ fn main() -> Result<()> {
 
     log::debug!("Vault root: {}", vault.root.display());
 
-    // Acquire lock file with proper RAII cleanup
     let _lock_guard = if args.force {
         LockGuard::force_new(&vault.lock_file)
             .context("Failed to acquire lock file (force mode)")?
@@ -369,7 +357,7 @@ fn main() -> Result<()> {
         } => {
             let all_cards = if path.is_dir() {
                 let file_types_set = file_types_to_set(&file_types);
-                let mut index = load_scan_index(&vault.scan_index_file);
+                let mut index = db::load_scan_index(&vault.db_path);
                 let files = collect_files(&path, &file_types_set);
                 let to_scan: Vec<PathBuf> = if full {
                     files
@@ -386,7 +374,7 @@ fn main() -> Result<()> {
                     if modified.is_empty() {
                         log::info!("No modified files detected; skipping scan");
                         if !dry_run {
-                            save_scan_index(&vault.scan_index_file, &index);
+                            db::save_scan_index(&vault.db_path, &index);
                         }
                         return Ok(());
                     }
@@ -398,21 +386,21 @@ fn main() -> Result<()> {
                     acc.append(&mut cs);
                 }
                 if !dry_run {
-                    save_scan_index(&vault.scan_index_file, &index);
+                    db::save_scan_index(&vault.db_path, &index);
                 }
                 acc
             } else if path.is_file() {
                 if !dry_run {
-                    let mut index = load_scan_index(&vault.scan_index_file);
+                    let mut index = db::load_scan_index(&vault.db_path);
                     let m = mtime_secs(&path).unwrap_or(0);
                     index.insert(path.to_string_lossy().to_string(), m);
-                    save_scan_index(&vault.scan_index_file, &index);
+                    db::save_scan_index(&vault.db_path, &index);
                 }
                 card::parse_file(&path)?
             } else {
                 vec![]
             };
-            let stats = db::update_db(&vault.db_file, all_cards, full, dry_run)?;
+            let stats = db::update_db(&vault.db_path, all_cards, full, dry_run)?;
             let prefix = if dry_run { "[dry-run] " } else { "" };
             let mut parts = vec![format!("{prefix}Found {} card(s)", stats.found)];
             if stats.new > 0 {
@@ -430,12 +418,12 @@ fn main() -> Result<()> {
             println!("{}", parts.join(", "));
         }
         Commands::Audit {} => {
-            let db = db::get_db(&vault.db_file)?;
-            let db_file = vault.db_file.clone();
+            let db = db::get_db(&vault.db_path)?;
+            let db_path = vault.db_path.clone();
             let cards = db.into_values().filter(|c| c.orphan || c.leech).collect();
             let mut terminal = view::init()?;
             let res =
-                view::audit::App::new(cards, Box::new(move |id| db::delete_card(&db_file, id)))
+                view::audit::App::new(cards, Box::new(move |id| db::delete_card(&db_path, id)))
                     .run(&mut terminal);
             view::restore()?;
             res?
@@ -452,8 +440,8 @@ fn main() -> Result<()> {
             reverse_probability,
             tag: tags,
         } => {
-            let db = db::get_db(&vault.db_file)?;
-            let mut state = db::get_global_state(&vault.state_file)?;
+            let db = db::get_db(&vault.db_path)?;
+            let mut state = db::get_global_state(&vault.db_path)?;
             db::refresh_global_state(&mut state);
             let tags_set: HashSet<String> = tags.iter().cloned().collect();
             let mut cards = filter_cards(
@@ -473,8 +461,8 @@ fn main() -> Result<()> {
             println!("{} card(s) due for review.", cards.len());
             let total_cards = cards.len();
             let mut terminal = view::init()?;
-            let db_file = vault.db_file.clone();
-            let state_file = vault.state_file.clone();
+            let db_path = vault.db_path.clone();
+            let db_path2 = vault.db_path.clone();
             let mut app = view::revise::App::new(
                 new_algorithm(algorithm),
                 cards,
@@ -487,8 +475,8 @@ fn main() -> Result<()> {
                 },
                 Box::new(move |cards, state| {
                     if !cram {
-                        let _ = db::update_cards(&db_file, cards);
-                        db::write_global_state(&state_file, state)?;
+                        let _ = db::update_cards(&db_path, cards);
+                        db::write_global_state(&db_path2, state)?;
                     }
                     Ok(())
                 }),
@@ -503,7 +491,7 @@ fn main() -> Result<()> {
             if !source.exists() {
                 anyhow::bail!("Source file not found: {}", source.display());
             }
-            let updated = import_stats(&source, &vault.db_file, dry_run)?;
+            let updated = import_stats(&source, &vault.db_path, dry_run)?;
             let prefix = if dry_run {
                 "[dry-run] Would import"
             } else {
@@ -511,8 +499,25 @@ fn main() -> Result<()> {
             };
             println!(
                 "{prefix} review history for {updated} card(s) into {}",
-                vault.db_file.display()
+                vault.db_path.display()
             );
+        }
+        Commands::Export { output_dir } => {
+            if !output_dir.exists() {
+                std::fs::create_dir_all(&output_dir)?;
+            }
+            let db = db::get_db(&vault.db_path)?;
+            let state = db::get_global_state(&vault.db_path)?;
+
+            let cards_json = db::export_json_cards(&db)?;
+            let state_json = db::export_json_state(&state)?;
+
+            let cards_path = output_dir.join("cards.json");
+            let state_path = output_dir.join("state.json");
+            std::fs::write(&cards_path, cards_json)?;
+            std::fs::write(&state_path, state_json)?;
+
+            println!("Exported {} card(s) to {}", db.len(), output_dir.display());
         }
     }
 
@@ -528,11 +533,9 @@ mod tests {
         let folder = PathBuf::from("tests/fixtures");
         let file_types = vec!["md".to_string()];
         let cards = parse_cards_from_folder(&folder, &file_types).unwrap();
-        // 2 single-line + 2 multi-line = 4 (ignored.md is skipped)
         assert_eq!(cards.len(), 4);
         assert!(cards.iter().any(|c| c.prompt == "Capital of France?"));
         assert!(cards.iter().any(|c| c.prompt == "Explain photosynthesis"));
-        // Verify ignored file was skipped
         assert!(!cards.iter().any(|c| c.prompt.contains("ignored")));
     }
 
@@ -719,7 +722,6 @@ mod tests {
         let source_file = NamedTempFile::new().unwrap();
         let target_file = NamedTempFile::new().unwrap();
 
-        // Create source db with reviewed card
         let mut source_db = get_card_db();
         let entry = source_db.get_mut(&blake3::hash(b"test")).unwrap();
         entry.revise_count = 10;
@@ -727,14 +729,12 @@ mod tests {
         entry.state.interval = 5;
         db::write_db(source_file.path(), &source_db).unwrap();
 
-        // Create target db with same card but no reviews
         let target_db = get_card_db();
         db::write_db(target_file.path(), &target_db).unwrap();
 
         let updated = import_stats(source_file.path(), target_file.path(), false).unwrap();
         assert_eq!(updated, 1);
 
-        // Verify stats were imported
         let result_db = db::get_db(target_file.path()).unwrap();
         let card = result_db.get(&blake3::hash(b"test")).unwrap();
         assert_eq!(card.revise_count, 10);
@@ -748,7 +748,6 @@ mod tests {
         let source_file = NamedTempFile::new().unwrap();
         let target_file = NamedTempFile::new().unwrap();
 
-        // Source has fewer reviews
         let mut source_db = get_card_db();
         source_db
             .get_mut(&blake3::hash(b"test"))
@@ -756,7 +755,6 @@ mod tests {
             .revise_count = 2;
         db::write_db(source_file.path(), &source_db).unwrap();
 
-        // Target has more reviews
         let mut target_db = get_card_db();
         target_db
             .get_mut(&blake3::hash(b"test"))
@@ -767,11 +765,40 @@ mod tests {
         let updated = import_stats(source_file.path(), target_file.path(), false).unwrap();
         assert_eq!(updated, 0);
 
-        // Verify target was not modified
         let result_db = db::get_db(target_file.path()).unwrap();
         assert_eq!(
             result_db.get(&blake3::hash(b"test")).unwrap().revise_count,
             5
+        );
+    }
+
+    #[test]
+    fn test_import_from_json() {
+        use tempfile::NamedTempFile;
+
+        let target_file = NamedTempFile::new().unwrap();
+
+        // Write target SQLite db
+        let target_db = get_card_db();
+        db::write_db(target_file.path(), &target_db).unwrap();
+
+        // Create source as JSON
+        let mut source_db = get_card_db();
+        source_db
+            .get_mut(&blake3::hash(b"test"))
+            .unwrap()
+            .revise_count = 7;
+        let json = db::export_json_cards(&source_db).unwrap();
+        let json_file = NamedTempFile::with_suffix(".json").unwrap();
+        std::fs::write(json_file.path(), &json).unwrap();
+
+        let updated = import_stats(json_file.path(), target_file.path(), false).unwrap();
+        assert_eq!(updated, 1);
+
+        let result_db = db::get_db(target_file.path()).unwrap();
+        assert_eq!(
+            result_db.get(&blake3::hash(b"test")).unwrap().revise_count,
+            7
         );
     }
 }

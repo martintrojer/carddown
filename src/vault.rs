@@ -3,12 +3,10 @@ use std::path::{Path, PathBuf};
 const PROJECT_MARKERS: &[&str] = &[".carddown", ".git", ".hg", ".jj"];
 const VAULT_DIR: &str = ".carddown";
 
-/// Resolved vault paths — all files live inside `.carddown/` at the vault root.
+/// Resolved vault paths — all data lives in `.carddown/carddown.db` at the vault root.
 pub struct VaultPaths {
     pub root: PathBuf,
-    pub db_file: PathBuf,
-    pub state_file: PathBuf,
-    pub scan_index_file: PathBuf,
+    pub db_path: PathBuf,
     pub lock_file: PathBuf,
 }
 
@@ -16,9 +14,7 @@ impl VaultPaths {
     fn new(root: PathBuf) -> Self {
         let dir = root.join(VAULT_DIR);
         Self {
-            db_file: dir.join("cards.json"),
-            state_file: dir.join("state.json"),
-            scan_index_file: dir.join("scan_index.json"),
+            db_path: dir.join("carddown.db"),
             lock_file: dir.join("lock"),
             root,
         }
@@ -80,7 +76,7 @@ mod tests {
 
         let paths = find_vault_root(&sub);
         assert_eq!(paths.root, tmp.path().canonicalize().unwrap());
-        assert!(paths.db_file.ends_with(".carddown/cards.json"));
+        assert!(paths.db_path.ends_with(".carddown/carddown.db"));
     }
 
     #[test]

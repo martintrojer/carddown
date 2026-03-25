@@ -4,7 +4,7 @@ A CLI flashcard system with spaced repetition that lives in your text files.
 
 ![carddown demo](doc/demo.gif)
 
-Study facts embedded in your markdown notes, tracked by content hash so cards survive edits and file moves. No cloud, no sync, no binary formats — just your files and a JSON database.
+Study facts embedded in your markdown notes, tracked by content hash so cards survive edits and file moves. No cloud, no sync — just your files and a SQLite database you can version control alongside your notes.
 
 - **Scan** — extract flashcards from any markdown/text file
 - **Revise** — interactive TUI with spaced repetition (SM2, SM5, Simple8)

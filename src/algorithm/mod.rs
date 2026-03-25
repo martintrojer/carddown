@@ -47,7 +47,7 @@ pub struct CardState {
     // An integer number indicating the number of days to wait before the next review
     pub interval: u64,
     // The number of times the information has been reviewed prior to this review
-    repetitions: u64,
+    pub(crate) repetitions: u64,
     // The number of times the information has been reviewed and failed
     pub failed_count: u64,
 }

@@ -92,6 +92,16 @@ Cards are matched by content hash. Only cards that exist in both databases are u
 
 **Migrating from pre-0.3.0:** Older versions stored data globally in `~/.local/state/carddown/`. After scanning your notes with 0.3.0+ (which creates a local `.carddown/`), run `carddown import ~/.local/state/carddown/cards.json` to bring over your review history.
 
+### Export
+
+Export the current vault database to JSON files for backup or interoperability.
+
+```bash
+carddown export ./backup
+```
+
+Writes `cards.json` and `state.json` to the specified directory.
+
 ### Global flags
 
 | Flag | Description |
@@ -149,9 +159,7 @@ Carddown stores data per-vault in a `.carddown/` directory at the project root. 
 my-notes/
 ├── .git/
 ├── .carddown/          ← created automatically
-│   ├── cards.json      ← card database with review history
-│   ├── state.json      ← global state (mean quality, session count)
-│   ├── scan_index.json ← file modification times for incremental scanning
+│   ├── carddown.db     ← SQLite database (cards, state, scan index)
 │   └── lock            ← lock file to prevent concurrent access
 ├── physics/
 │   └── notes.md
@@ -161,9 +169,9 @@ my-notes/
 
 Each vault is independent — scanning and reviewing in one vault never affects another. Use `--vault <path>` to override auto-discovery.
 
-All files are human-readable JSON. Cards are identified by blake3 content hash, so they survive file moves and edits to surrounding text.
+All data lives in a single `carddown.db` SQLite file. Cards are identified by blake3 content hash, so they survive file moves and edits to surrounding text.
 
-Consider adding `.carddown/` to your `.gitignore`.
+The database file is safe to version control — it's a single binary that tracks your review progress alongside your notes. Use `carddown export <dir>` to get human-readable JSON if needed.
 
 ## Terminology
 
