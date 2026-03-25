@@ -509,6 +509,62 @@ pub fn save_scan_index(db_path: &Path, index: &ScanIndex) {
 
 // --- JSON import/export for migration ---
 
+/// Auto-migrate from JSON files to SQLite if old-format files exist.
+///
+/// Detects `cards.json` (and optionally `state.json`, `scan_index.json`)
+/// as siblings of `db_path` in `.carddown/`. Migrates data into the new
+/// SQLite database and prints a summary. The old JSON files are left in
+/// place — the user can delete them manually.
+pub fn maybe_migrate_json(db_path: &Path) -> Result<()> {
+    if db_path.exists() {
+        return Ok(());
+    }
+    let dir = match db_path.parent() {
+        Some(d) => d,
+        None => return Ok(()),
+    };
+    let cards_json = dir.join("cards.json");
+    if !cards_json.exists() {
+        return Ok(());
+    }
+
+    eprintln!("Migrating from JSON to SQLite...");
+
+    let card_db = load_json_cards(&cards_json)?;
+    let card_count = card_db.len();
+
+    // Write cards to SQLite
+    if !card_db.is_empty() {
+        write_db(db_path, &card_db)?;
+    }
+
+    // Migrate state.json
+    let state_json = dir.join("state.json");
+    if state_json.exists() {
+        if let Ok(data) = std::fs::read_to_string(&state_json) {
+            if let Ok(state) = serde_json::from_str::<GlobalState>(&data) {
+                write_global_state(db_path, &state)?;
+            }
+        }
+    }
+
+    // Migrate scan_index.json
+    let index_json = dir.join("scan_index.json");
+    if index_json.exists() {
+        if let Ok(data) = std::fs::read_to_string(&index_json) {
+            if let Ok(index) = serde_json::from_str::<ScanIndex>(&data) {
+                save_scan_index(db_path, &index);
+            }
+        }
+    }
+
+    eprintln!(
+        "Migrated {card_count} card(s) to {}. Old JSON files kept in place.",
+        db_path.display()
+    );
+    Ok(())
+}
+
 /// Load a CardDb from an old-format JSON file (pre-0.3.0 cards.json).
 pub fn load_json_cards(json_path: &Path) -> Result<CardDb> {
     let data = std::fs::read_to_string(json_path)
@@ -830,5 +886,93 @@ mod tests {
         // Also verify the SQLite db is intact
         let sqlite_db = get_db(file.path()).unwrap();
         assert_eq!(db.len(), sqlite_db.len());
+    }
+
+    #[test]
+    fn test_maybe_migrate_json() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".carddown");
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("carddown.db");
+
+        // Write old-format JSON files
+        let entries = get_card_entries();
+        let json = serde_json::to_string(&entries).unwrap();
+        std::fs::write(dir.join("cards.json"), &json).unwrap();
+
+        let state = GlobalState {
+            mean_q: Some(3.5),
+            total_cards_revised: 42,
+            ..Default::default()
+        };
+        let state_json = serde_json::to_string(&state).unwrap();
+        std::fs::write(dir.join("state.json"), &state_json).unwrap();
+
+        let mut index = ScanIndex::new();
+        index.insert("test.md".to_string(), 12345);
+        let index_json = serde_json::to_string(&index).unwrap();
+        std::fs::write(dir.join("scan_index.json"), &index_json).unwrap();
+
+        // Run migration
+        maybe_migrate_json(&db_path).unwrap();
+        assert!(db_path.exists());
+
+        // Verify cards migrated
+        let migrated_db = get_db(&db_path).unwrap();
+        assert_eq!(migrated_db.len(), 2);
+
+        // Verify state migrated
+        let migrated_state = get_global_state(&db_path).unwrap();
+        assert_eq!(migrated_state.mean_q, Some(3.5));
+        assert_eq!(migrated_state.total_cards_revised, 42);
+
+        // Verify scan index migrated
+        let migrated_index = load_scan_index(&db_path);
+        assert_eq!(migrated_index.get("test.md"), Some(&12345));
+
+        // Old JSON files should still exist
+        assert!(dir.join("cards.json").exists());
+    }
+
+    #[test]
+    fn test_maybe_migrate_json_noop_when_db_exists() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".carddown");
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("carddown.db");
+
+        // Create an existing SQLite db with one card
+        let mut db = CardDb::new();
+        let entries = get_card_entries();
+        db.insert(entries[0].card.id, entries[0].clone());
+        write_db(&db_path, &db).unwrap();
+
+        // Write JSON with different data
+        let json = serde_json::to_string(&get_card_entries()).unwrap();
+        std::fs::write(dir.join("cards.json"), &json).unwrap();
+
+        // Migration should be a no-op since db already exists
+        maybe_migrate_json(&db_path).unwrap();
+
+        let result_db = get_db(&db_path).unwrap();
+        assert_eq!(result_db.len(), 1); // Should not have migrated the second card
+    }
+
+    #[test]
+    fn test_maybe_migrate_json_noop_when_no_json() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".carddown");
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("carddown.db");
+
+        // No JSON files, no db — should be a no-op
+        maybe_migrate_json(&db_path).unwrap();
+        assert!(!db_path.exists());
     }
 }

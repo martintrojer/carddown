@@ -149,7 +149,7 @@ enum Commands {
     /// the current vault. Cards are matched by content hash — only cards
     /// that exist in both databases are updated.
     ///
-    /// Use this to migrate from an older carddown version (pre-0.3.0) that
+    /// Use this to migrate from an older carddown version (pre-0.4.0) that
     /// stored data globally in ~/.local/state/carddown/, or to merge review
     /// history when reorganising vaults.
     Import {
@@ -339,6 +339,9 @@ fn main() -> Result<()> {
         .context("Failed to create .carddown/ directory")?;
 
     log::debug!("Vault root: {}", vault.root.display());
+
+    // Auto-migrate from JSON files if upgrading from pre-0.4.0
+    db::maybe_migrate_json(&vault.db_path)?;
 
     let _lock_guard = if args.force {
         LockGuard::force_new(&vault.lock_file)

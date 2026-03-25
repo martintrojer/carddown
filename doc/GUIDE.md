@@ -84,13 +84,25 @@ Navigate with arrow keys (`h`/`k` for left, `l`/`j` for right). Press `d` then `
 Merge review history from another carddown database into the current vault.
 
 ```bash
-carddown import ~/.local/state/carddown/cards.json   # migrate from pre-0.3.0
-carddown import ../other-vault/.carddown/cards.json   # merge from another vault
+carddown import ~/.local/state/carddown/cards.json   # import from JSON file
+carddown import ../other-vault/.carddown/carddown.db  # import from another SQLite vault
 ```
 
-Cards are matched by content hash. Only cards that exist in both databases are updated, and only if the source has more reviews than the target. This is safe to run multiple times.
+Accepts both `.json` (legacy) and `.db` (SQLite) source files. Cards are matched by content hash. Only cards that exist in both databases are updated, and only if the source has more reviews than the target. Safe to run multiple times.
 
-**Migrating from pre-0.3.0:** Older versions stored data globally in `~/.local/state/carddown/`. After scanning your notes with 0.3.0+ (which creates a local `.carddown/`), run `carddown import ~/.local/state/carddown/cards.json` to bring over your review history.
+#### Migrating from older versions
+
+**From pre-0.3.0 (global JSON database):** Older versions stored data in `~/.local/state/carddown/`. To migrate:
+
+```bash
+cd your-notes/
+carddown scan .                                         # creates .carddown/
+carddown import ~/.local/state/carddown/cards.json      # import review history
+```
+
+**From 0.3.0 (per-vault JSON files):** If your `.carddown/` directory contains `cards.json` instead of `carddown.db`, carddown will auto-migrate on the next run. The old JSON files are kept in place — you can delete them after verifying the migration.
+
+**Merging vaults:** Use `import` to merge review history between vaults. The `export` command can create JSON snapshots for backup or inspection.
 
 ### Export
 

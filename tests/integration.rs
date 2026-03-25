@@ -334,3 +334,65 @@ fn test_export() {
     let cards: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap();
     assert_eq!(cards.len(), 4);
 }
+
+#[test]
+fn test_auto_migrate_from_json() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    // First scan with the current version to get valid JSON data
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    // Export to get JSON cards
+    let export_dir = vault.path().join("export");
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["export", &export_dir.to_string_lossy()])
+        .output()
+        .unwrap();
+
+    // Simulate a pre-0.4.0 vault: delete the SQLite db, put JSON files in .carddown/
+    let carddown_dir = vault.path().join(".carddown");
+    std::fs::remove_file(carddown_dir.join("carddown.db")).unwrap();
+    std::fs::copy(
+        export_dir.join("cards.json"),
+        carddown_dir.join("cards.json"),
+    )
+    .unwrap();
+    std::fs::copy(
+        export_dir.join("state.json"),
+        carddown_dir.join("state.json"),
+    )
+    .unwrap();
+
+    // Any command should trigger auto-migration
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["revise", "-n", "0"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Migrating from JSON to SQLite"),
+        "stderr: {stderr}"
+    );
+
+    // Verify the SQLite db was created and has the cards
+    assert!(carddown_dir.join("carddown.db").exists());
+
+    // Export again and verify data integrity
+    let verify_dir = vault.path().join("verify");
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["export", &verify_dir.to_string_lossy()])
+        .output()
+        .unwrap();
+    let content = std::fs::read_to_string(verify_dir.join("cards.json")).unwrap();
+    let cards: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap();
+    assert_eq!(cards.len(), 4);
+}
