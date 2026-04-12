@@ -95,7 +95,10 @@ mod tests {
         let paths = find_vault_root(&sub);
         assert_eq!(paths.root, tmp.path().canonicalize().unwrap());
         assert!(paths.db_path.ends_with(".carddown/carddown.db"));
-        assert_eq!(paths.vault_dir, tmp.path().join(".carddown"));
+        assert_eq!(
+            paths.vault_dir,
+            tmp.path().canonicalize().unwrap().join(".carddown")
+        );
     }
 
     #[test]
