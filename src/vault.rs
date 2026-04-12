@@ -3,28 +3,46 @@ use std::path::{Path, PathBuf};
 const PROJECT_MARKERS: &[&str] = &[".carddown", ".git", ".hg", ".jj"];
 const VAULT_DIR: &str = ".carddown";
 
-/// Resolved vault paths — all data lives in `.carddown/carddown.db` at the vault root.
+/// Resolved vault paths for vault-local config and persistent state files.
 pub struct VaultPaths {
     pub root: PathBuf,
+    pub vault_dir: PathBuf,
+    pub state_dir: PathBuf,
     pub db_path: PathBuf,
     pub lock_file: PathBuf,
 }
 
 impl VaultPaths {
     fn new(root: PathBuf) -> Self {
-        let dir = root.join(VAULT_DIR);
+        let vault_dir = root.join(VAULT_DIR);
         Self {
-            db_path: dir.join("carddown.db"),
-            lock_file: dir.join("lock"),
+            db_path: vault_dir.join("carddown.db"),
+            lock_file: vault_dir.join("lock"),
+            state_dir: vault_dir.clone(),
+            vault_dir,
             root,
         }
     }
 
-    /// Ensure the `.carddown/` directory exists.
-    pub fn ensure_dir(&self) -> std::io::Result<()> {
-        let dir = self.root.join(VAULT_DIR);
-        if !dir.exists() {
-            std::fs::create_dir_all(&dir)?;
+    pub fn with_state_dir(mut self, state_dir: impl AsRef<Path>) -> Self {
+        let state_dir = if state_dir.as_ref().is_absolute() {
+            state_dir.as_ref().to_path_buf()
+        } else {
+            self.root.join(state_dir)
+        };
+        self.db_path = state_dir.join("carddown.db");
+        self.lock_file = state_dir.join("lock");
+        self.state_dir = state_dir;
+        self
+    }
+
+    /// Ensure `.carddown/` and storage directories exist.
+    pub fn ensure_dirs(&self) -> std::io::Result<()> {
+        if !self.vault_dir.exists() {
+            std::fs::create_dir_all(&self.vault_dir)?;
+        }
+        if !self.state_dir.exists() {
+            std::fs::create_dir_all(&self.state_dir)?;
         }
         Ok(())
     }
@@ -77,6 +95,7 @@ mod tests {
         let paths = find_vault_root(&sub);
         assert_eq!(paths.root, tmp.path().canonicalize().unwrap());
         assert!(paths.db_path.ends_with(".carddown/carddown.db"));
+        assert_eq!(paths.vault_dir, tmp.path().join(".carddown"));
     }
 
     #[test]
@@ -111,11 +130,19 @@ mod tests {
     }
 
     #[test]
-    fn test_ensure_dir_creates_carddown() {
+    fn test_ensure_dirs_creates_carddown() {
         let tmp = TempDir::new().unwrap();
         let paths = VaultPaths::new(tmp.path().to_path_buf());
         assert!(!tmp.path().join(".carddown").exists());
-        paths.ensure_dir().unwrap();
+        paths.ensure_dirs().unwrap();
         assert!(tmp.path().join(".carddown").exists());
+    }
+
+    #[test]
+    fn test_with_state_dir_relative_to_root() {
+        let tmp = TempDir::new().unwrap();
+        let paths = VaultPaths::new(tmp.path().to_path_buf()).with_state_dir("../state");
+        assert_eq!(paths.state_dir, tmp.path().join("../state"));
+        assert_eq!(paths.db_path, tmp.path().join("../state/carddown.db"));
     }
 }

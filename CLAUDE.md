@@ -44,7 +44,7 @@ Audit: cards.json → filter orphan/leech → audit::App TUI → delete cards
 |---|---|
 | `card.rs` | Parse flashcards from markdown. Single-line `Q : A 🧠 #tag` and multi-line with `---`/`***` separators. Cards identified by blake3 hash of content (survives file moves). |
 | `vault.rs` | Vault root discovery: walks up from cwd/scan path looking for `.carddown/`, `.git/`, `.hg/`, `.jj/`. `VaultPaths` resolves all file paths. |
-| `db.rs` | SQLite storage in `.carddown/carddown.db`. Cards, global state, and scan index in one file. JSON import/export for migration. |
+| `db.rs` | SQLite storage in `carddown.db`. Default path is `.carddown/carddown.db`, but `.carddown/config.toml` can move state elsewhere. Cards, global state, and scan index live in one file. JSON import/export for migration. |
 | `algorithm/` | SM2, SM5, Simple8 spaced repetition. Quality grades 0-5 where 0-2 are failures. `CardState` tracks ease_factor, interval, repetitions, failed_count. |
 | `view/revise.rs` | Ratatui TUI for review sessions. `ReviseConfig` groups session params. Requires reveal before grading. Shows status messages for leech/expiry. |
 | `view/audit.rs` | Ratatui TUI for card cleanup. Colored status messages (success/error/info). Blocks leech deletion with feedback. |
@@ -54,9 +54,10 @@ Audit: cards.json → filter orphan/leech → audit::App TUI → delete cards
 **Key design decisions:**
 
 - **Content hashing for identity**: Cards are identified by blake3 hash of their content, not file path or line number. This means cards survive file moves and renames. Changing the hash input would silently orphan all existing cards — the `test_card_id_stability` test guards against this.
-- **Per-vault storage**: Data lives in `.carddown/carddown.db` (SQLite) at the vault root, discovered by walking up from cwd or scan path. Each vault is independent — `--vault` overrides discovery. The database file is safe to version control.
-- **SQLite storage**: Cards, global state, and scan index all live in one `carddown.db` file with WAL mode. JSON import/export available via `import` and `export` commands for migration and backup.
-- **Lock file prevents concurrent instances**: A lock file in `.carddown/` prevents multiple carddown processes from corrupting the database. `--force` overrides.
+- **Per-vault storage**: Config lives in `.carddown/` at the vault root, discovered by walking up from cwd or scan path. Each vault is independent — `--vault` overrides discovery.
+- **Config precedence**: CLI flags override `.carddown/config.toml`, which overrides hardcoded defaults. Action flags like `--full`, `--dry-run`, and `--force` stay CLI-only.
+- **SQLite storage**: Cards, global state, and scan index all live in one `carddown.db` file with WAL mode. Default path is `.carddown/carddown.db`; `[storage].state_dir` can relocate DB, WAL/SHM, and lock outside vault.
+- **Lock file prevents concurrent instances**: Lock file lives next to configured database path. `--force` overrides.
 - **Incremental scanning**: The `scan_index` table tracks file mtimes. Only modified files are re-parsed unless `--full` is used.
 - **Reveal-before-grade invariant**: The revise TUI requires pressing space to reveal the answer before any quality grade (0-5) is accepted. `try_grade()` enforces this.
 - **Tag filtering happens before the TUI**: `filter_cards()` in `main.rs` handles tag/orphan/leech/interval filtering. The revise `App` receives pre-filtered cards.

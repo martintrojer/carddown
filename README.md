@@ -4,7 +4,7 @@ A CLI flashcard system with spaced repetition that lives in your text files.
 
 ![carddown demo](doc/demo.gif)
 
-Study facts embedded in your markdown notes, tracked by content hash so cards survive edits and file moves. No cloud, no sync — just your files and a SQLite database you can version control alongside your notes.
+Study facts embedded in your markdown notes, tracked by content hash so cards survive edits and file moves. No cloud, no sync — just your files and per-vault SQLite state, with optional relocation via `.carddown/config.toml`.
 
 - **Scan** — extract flashcards from any markdown/text file
 - **Revise** — interactive TUI with spaced repetition (SM2, SM5, Simple8)
@@ -59,7 +59,7 @@ Tags like `#physics` let you focus study sessions: `carddown revise --tag physic
 
 | Feature | |
 |---|---|
-| **Per-vault storage** | Data lives in `.carddown/` alongside your notes — multiple vaults stay independent |
+| **Per-vault storage** | Config and state lives in `.carddown/`. DB location configurable |
 | **Spaced repetition** | SM2, SM5, and Simple8 algorithms with quality grades 0-5 |
 | **Content hashing** | Cards identified by blake3 hash — move files freely |
 | **Tags** | Filter study sessions by topic |

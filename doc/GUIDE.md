@@ -25,6 +25,13 @@ Incremental scanning (the default) only re-parses files modified since the last 
 
 You can add `@carddown-ignore` anywhere in a file to exclude it from scanning.
 
+Persistent scan defaults can live in `.carddown/config.toml`:
+
+```toml
+[scan]
+file_types = ["md", "txt", "org"]
+```
+
 ### Revise
 
 Start an interactive study session with due cards.
@@ -51,6 +58,18 @@ Options:
 | `--reverse-probability` | 0.0 | Chance to swap prompt/response |
 | `--cram` | off | Ignore intervals, review all cards (doesn't affect stats) |
 | `--cram-hours` | 12 | Hours since last review for cram mode |
+
+Persistent revise defaults can live in `.carddown/config.toml`:
+
+```toml
+[revise]
+maximum_cards_per_session = 30
+maximum_duration_of_session = 20
+leech_failure_threshold = 15
+leech_method = "skip"
+algorithm = "sm5"
+reverse_probability = 0.0
+```
 
 #### Revise workflow
 
@@ -165,14 +184,15 @@ Add `@carddown-ignore` anywhere in a file to skip it during scanning.
 
 ## Vaults
 
-Carddown stores data per-vault in a `.carddown/` directory at the project root. The vault root is discovered by walking up from the current directory (or scan path) looking for `.carddown/`, `.git/`, `.hg/`, or `.jj/`.
+Carddown stores config per-vault in `.carddown/` at project root. Vault root is discovered by walking up from current directory (or scan path) looking for `.carddown/`, `.git/`, `.hg/`, or `.jj/`.
 
 ```
 my-notes/
 ├── .git/
 ├── .carddown/          ← created automatically
-│   ├── carddown.db     ← SQLite database (cards, state, scan index)
-│   └── lock            ← lock file to prevent concurrent access
+│   ├── config.toml     ← optional per-vault defaults
+│   ├── carddown.db     ← default SQLite database location
+│   └── lock            ← default lock file location
 ├── physics/
 │   └── notes.md
 └── biology/
@@ -181,9 +201,16 @@ my-notes/
 
 Each vault is independent — scanning and reviewing in one vault never affects another. Use `--vault <path>` to override auto-discovery.
 
-All data lives in a single `carddown.db` SQLite file. Cards are identified by blake3 content hash, so they survive file moves and edits to surrounding text.
+By default all state lives in single `carddown.db` SQLite file under `.carddown/`. Cards are identified by blake3 content hash, so they survive file moves and edits to surrounding text.
 
-The database file is safe to version control — it's a single binary that tracks your review progress alongside your notes. Use `carddown export <dir>` to get human-readable JSON if needed.
+If you want SQLite files outside vault, set external state directory:
+
+```toml
+[storage]
+state_dir = "../carddown-state"
+```
+
+Relative paths resolve from vault root. `carddown.db`, `carddown.db-wal`, `carddown.db-shm`, and lock file move there together.
 
 ## Terminology
 

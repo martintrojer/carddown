@@ -9,7 +9,8 @@ use std::collections::HashMap;
 
 use crate::db::GlobalState;
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum Algo {
     SM2,
     SM5,

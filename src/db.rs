@@ -512,18 +512,13 @@ pub fn save_scan_index(db_path: &Path, index: &ScanIndex) {
 /// Auto-migrate from JSON files to SQLite if old-format files exist.
 ///
 /// Detects `cards.json` (and optionally `state.json`, `scan_index.json`)
-/// as siblings of `db_path` in `.carddown/`. Migrates data into the new
-/// SQLite database and prints a summary. The old JSON files are left in
-/// place — the user can delete them manually.
-pub fn maybe_migrate_json(db_path: &Path) -> Result<()> {
+/// in `legacy_dir`. Migrates data into `db_path` and prints a summary.
+/// The old JSON files are left in place — the user can delete them manually.
+pub fn maybe_migrate_json(db_path: &Path, legacy_dir: &Path) -> Result<()> {
     if db_path.exists() {
         return Ok(());
     }
-    let dir = match db_path.parent() {
-        Some(d) => d,
-        None => return Ok(()),
-    };
-    let cards_json = dir.join("cards.json");
+    let cards_json = legacy_dir.join("cards.json");
     if !cards_json.exists() {
         return Ok(());
     }
@@ -539,7 +534,7 @@ pub fn maybe_migrate_json(db_path: &Path) -> Result<()> {
     }
 
     // Migrate state.json
-    let state_json = dir.join("state.json");
+    let state_json = legacy_dir.join("state.json");
     if state_json.exists() {
         if let Ok(data) = std::fs::read_to_string(&state_json) {
             if let Ok(state) = serde_json::from_str::<GlobalState>(&data) {
@@ -549,7 +544,7 @@ pub fn maybe_migrate_json(db_path: &Path) -> Result<()> {
     }
 
     // Migrate scan_index.json
-    let index_json = dir.join("scan_index.json");
+    let index_json = legacy_dir.join("scan_index.json");
     if index_json.exists() {
         if let Ok(data) = std::fs::read_to_string(&index_json) {
             if let Ok(index) = serde_json::from_str::<ScanIndex>(&data) {
@@ -916,7 +911,7 @@ mod tests {
         std::fs::write(dir.join("scan_index.json"), &index_json).unwrap();
 
         // Run migration
-        maybe_migrate_json(&db_path).unwrap();
+        maybe_migrate_json(&db_path, dir.as_path()).unwrap();
         assert!(db_path.exists());
 
         // Verify cards migrated
@@ -956,7 +951,7 @@ mod tests {
         std::fs::write(dir.join("cards.json"), &json).unwrap();
 
         // Migration should be a no-op since db already exists
-        maybe_migrate_json(&db_path).unwrap();
+        maybe_migrate_json(&db_path, dir.as_path()).unwrap();
 
         let result_db = get_db(&db_path).unwrap();
         assert_eq!(result_db.len(), 1); // Should not have migrated the second card
@@ -972,7 +967,7 @@ mod tests {
         let db_path = dir.join("carddown.db");
 
         // No JSON files, no db — should be a no-op
-        maybe_migrate_json(&db_path).unwrap();
+        maybe_migrate_json(&db_path, dir.as_path()).unwrap();
         assert!(!db_path.exists());
     }
 }

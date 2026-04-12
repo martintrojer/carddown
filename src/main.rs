@@ -1,5 +1,6 @@
 mod algorithm;
 mod card;
+mod config;
 mod db;
 mod vault;
 mod view;
@@ -14,9 +15,11 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use rand::prelude::*;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::ErrorKind;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
@@ -67,7 +70,8 @@ mod defaults {
     pub const REVERSE_PROBABILITY: f64 = 0.0;
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 enum LeechMethod {
     Skip,
     Warn,
@@ -77,9 +81,9 @@ enum LeechMethod {
 enum Commands {
     /// Scan files for flashcards and add them to the database
     Scan {
-        /// File extensions to scan (e.g., md, txt, org)
-        #[arg(long, default_values = ["md", "txt", "org"])]
-        file_types: Vec<String>,
+        /// File extensions to scan (e.g., md, txt, org). Default: md, txt, org.
+        #[arg(long)]
+        file_types: Option<Vec<String>>,
 
         /// Perform a complete rescan instead of only checking modified files.
         /// Warning: May generate orphaned cards if files were deleted
@@ -99,27 +103,27 @@ enum Commands {
     Audit {},
     /// Start a flashcard review session
     Revise {
-        /// Limit the number of cards to review in this session
-        #[arg(short = 'n', long, default_value_t = defaults::MAX_CARDS_PER_SESSION)]
-        maximum_cards_per_session: usize,
+        /// Limit the number of cards to review in this session. Default: 30.
+        #[arg(short = 'n', long)]
+        maximum_cards_per_session: Option<usize>,
 
-        /// Maximum length of review session in minutes
-        #[arg(short = 'd', long, default_value_t = defaults::MAX_DURATION_MINUTES)]
-        maximum_duration_of_session: usize,
+        /// Maximum length of review session in minutes. Default: 20.
+        #[arg(short = 'd', long)]
+        maximum_duration_of_session: Option<usize>,
 
-        /// Number of failures before a card is marked as a leech
-        #[arg(long, default_value_t = defaults::LEECH_FAILURE_THRESHOLD)]
-        leech_failure_threshold: usize,
+        /// Number of failures before a card is marked as a leech. Default: 15.
+        #[arg(long)]
+        leech_failure_threshold: Option<usize>,
 
         /// How to handle leech cards during review:
         /// skip - Skip leech cards entirely.
-        /// warn - Show leech cards but display a warning
-        #[arg(long, value_enum, default_value_t = LeechMethod::Skip)]
-        leech_method: LeechMethod,
+        /// warn - Show leech cards but display a warning. Default: skip.
+        #[arg(long, value_enum)]
+        leech_method: Option<LeechMethod>,
 
-        /// Spaced repetition algorithm to determine card intervals
-        #[arg(short = 'a', long, value_enum, default_value_t = Algo::SM5)]
-        algorithm: Algo,
+        /// Spaced repetition algorithm to determine card intervals. Default: sm5.
+        #[arg(short = 'a', long, value_enum)]
+        algorithm: Option<Algo>,
 
         /// Only show cards with these tags (shows all cards if no tags specified)
         #[arg(short = 't', long)]
@@ -129,9 +133,9 @@ enum Commands {
         #[arg(long)]
         include_orphans: bool,
 
-        /// Chance to swap question/answer (0.0 = never, 1.0 = always)
-        #[arg(short = 'r', long, default_value_t = defaults::REVERSE_PROBABILITY)]
-        reverse_probability: f64,
+        /// Chance to swap question/answer (0.0 = never, 1.0 = always). Default: 0.0.
+        #[arg(short = 'r', long)]
+        reverse_probability: Option<f64>,
 
         /// Enable review of all cards not seen in --cram-hours, ignoring intervals
         /// Note: Reviews in cram mode don't affect card statistics
@@ -176,7 +180,7 @@ enum Commands {
 ///
 /// Data is stored in a .carddown/carddown.db SQLite database at the vault root
 /// (discovered by walking up from the current directory or scan path looking for
-/// .carddown/, .git/, .hg/, or .jj/). This file is safe to version control.
+/// .carddown/, .git/, .hg/, or .jj/). `.carddown/config.toml` can relocate state files.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
@@ -191,6 +195,47 @@ struct Args {
     /// Warning: Only use if no other carddown instances are running
     #[arg(long)]
     force: bool,
+
+    /// Disable TUI startup. Intended for tests and non-interactive checks.
+    #[arg(long, hide = true, global = true)]
+    no_tty: bool,
+}
+
+#[derive(Debug)]
+enum ResolvedCommand {
+    Scan {
+        file_types: Vec<String>,
+        full: bool,
+        dry_run: bool,
+        path: PathBuf,
+    },
+    Audit {},
+    Revise {
+        maximum_cards_per_session: usize,
+        maximum_duration_of_session: usize,
+        leech_failure_threshold: usize,
+        leech_method: LeechMethod,
+        algorithm: Algo,
+        tag: Vec<String>,
+        include_orphans: bool,
+        reverse_probability: f64,
+        cram: bool,
+        cram_hours: usize,
+    },
+    Import {
+        source: PathBuf,
+        dry_run: bool,
+    },
+    Export {
+        output_dir: PathBuf,
+    },
+}
+
+#[derive(Debug)]
+struct ResolvedArgs {
+    command: ResolvedCommand,
+    force: bool,
+    no_tty: bool,
 }
 
 fn mtime_secs(path: &std::path::Path) -> Option<u64> {
@@ -292,6 +337,80 @@ fn resolve_vault(args: &Args) -> VaultPaths {
     }
 }
 
+fn resolve_args(args: Args, config: &config::Config) -> ResolvedArgs {
+    let command = match args.command {
+        Commands::Scan {
+            file_types,
+            full,
+            dry_run,
+            path,
+        } => ResolvedCommand::Scan {
+            file_types: file_types
+                .or_else(|| config.scan.file_types.clone())
+                .unwrap_or_else(|| vec!["md".to_string(), "txt".to_string(), "org".to_string()]),
+            full,
+            dry_run,
+            path,
+        },
+        Commands::Audit {} => ResolvedCommand::Audit {},
+        Commands::Revise {
+            maximum_cards_per_session,
+            maximum_duration_of_session,
+            leech_failure_threshold,
+            leech_method,
+            algorithm,
+            tag,
+            include_orphans,
+            reverse_probability,
+            cram,
+            cram_hours,
+        } => ResolvedCommand::Revise {
+            maximum_cards_per_session: maximum_cards_per_session
+                .or(config.revise.maximum_cards_per_session)
+                .unwrap_or(defaults::MAX_CARDS_PER_SESSION),
+            maximum_duration_of_session: maximum_duration_of_session
+                .or(config.revise.maximum_duration_of_session)
+                .unwrap_or(defaults::MAX_DURATION_MINUTES),
+            leech_failure_threshold: leech_failure_threshold
+                .or(config.revise.leech_failure_threshold)
+                .unwrap_or(defaults::LEECH_FAILURE_THRESHOLD),
+            leech_method: leech_method
+                .or(config.revise.leech_method)
+                .unwrap_or(LeechMethod::Skip),
+            algorithm: algorithm
+                .or(config.revise.algorithm.clone())
+                .unwrap_or(Algo::SM5),
+            tag,
+            include_orphans,
+            reverse_probability: reverse_probability
+                .or(config.revise.reverse_probability)
+                .unwrap_or(defaults::REVERSE_PROBABILITY),
+            cram,
+            cram_hours,
+        },
+        Commands::Import { source, dry_run } => ResolvedCommand::Import { source, dry_run },
+        Commands::Export { output_dir } => ResolvedCommand::Export { output_dir },
+    };
+
+    ResolvedArgs {
+        command,
+        force: args.force,
+        no_tty: args.no_tty,
+    }
+}
+
+fn ensure_tui_available(no_tty: bool, command: &str) -> Result<()> {
+    if no_tty {
+        anyhow::bail!("{command} disabled by --no-tty.");
+    }
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        anyhow::bail!(
+            "{command} requires interactive TTY. Run in terminal, or use non-TUI path for tests."
+        );
+    }
+    Ok(())
+}
+
 /// Load a CardDb from either a SQLite .db file or a legacy JSON file.
 fn load_source_db(path: &Path) -> Result<CardDb> {
     match path.extension().and_then(|e| e.to_str()) {
@@ -332,16 +451,21 @@ fn import_stats(source_path: &Path, target_path: &Path, dry_run: bool) -> Result
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     let args = Args::parse();
-
     let vault = resolve_vault(&args);
+    let config = config::load_config(&vault.vault_dir).map_err(anyhow::Error::msg)?;
+    let args = resolve_args(args, &config);
+    let vault = match config.storage.state_dir.as_ref() {
+        Some(state_dir) => vault.with_state_dir(state_dir),
+        None => vault,
+    };
     vault
-        .ensure_dir()
-        .context("Failed to create .carddown/ directory")?;
+        .ensure_dirs()
+        .context("Failed to create carddown directories")?;
 
     log::debug!("Vault root: {}", vault.root.display());
 
     // Auto-migrate from JSON files if upgrading from pre-0.4.0
-    db::maybe_migrate_json(&vault.db_path)?;
+    db::maybe_migrate_json(&vault.db_path, &vault.vault_dir)?;
 
     let _lock_guard = if args.force {
         LockGuard::force_new(&vault.lock_file)
@@ -352,7 +476,7 @@ fn main() -> Result<()> {
     };
 
     match args.command {
-        Commands::Scan {
+        ResolvedCommand::Scan {
             file_types,
             full,
             dry_run,
@@ -420,10 +544,15 @@ fn main() -> Result<()> {
             }
             eprintln!("{}", parts.join(", "));
         }
-        Commands::Audit {} => {
+        ResolvedCommand::Audit {} => {
             let db = db::get_db(&vault.db_path)?;
             let db_path = vault.db_path.clone();
-            let cards = db.into_values().filter(|c| c.orphan || c.leech).collect();
+            let cards: Vec<_> = db.into_values().filter(|c| c.orphan || c.leech).collect();
+            if cards.is_empty() {
+                eprintln!("No orphaned or leech cards to audit.");
+                return Ok(());
+            }
+            ensure_tui_available(args.no_tty, "audit")?;
             let mut terminal = view::init()?;
             let res =
                 view::audit::App::new(cards, Box::new(move |id| db::delete_card(&db_path, id)))
@@ -431,7 +560,7 @@ fn main() -> Result<()> {
             view::restore()?;
             res?
         }
-        Commands::Revise {
+        ResolvedCommand::Revise {
             algorithm,
             cram,
             cram_hours,
@@ -461,6 +590,7 @@ fn main() -> Result<()> {
                 eprintln!("No cards due for review.");
                 return Ok(());
             }
+            ensure_tui_available(args.no_tty, "revise")?;
             eprintln!("{} card(s) due for review.", cards.len());
             let total_cards = cards.len();
             let mut terminal = view::init()?;
@@ -490,7 +620,7 @@ fn main() -> Result<()> {
             res?;
             eprintln!("Reviewed {reviewed}/{total_cards} card(s).")
         }
-        Commands::Import { source, dry_run } => {
+        ResolvedCommand::Import { source, dry_run } => {
             if !source.exists() {
                 anyhow::bail!("Source file not found: {}", source.display());
             }
@@ -505,7 +635,7 @@ fn main() -> Result<()> {
                 vault.db_path.display()
             );
         }
-        Commands::Export { output_dir } => {
+        ResolvedCommand::Export { output_dir } => {
             if !output_dir.exists() {
                 std::fs::create_dir_all(&output_dir)?;
             }
@@ -530,6 +660,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
 
     #[test]
     fn test_parse_cards_from_folder() {
@@ -548,6 +679,101 @@ mod tests {
         let file_types = vec!["txt".to_string()];
         let cards = parse_cards_from_folder(&folder, &file_types).unwrap();
         assert!(cards.is_empty());
+    }
+
+    fn parse_args(argv: &[&str]) -> Args {
+        Args::parse_from(argv)
+    }
+
+    #[test]
+    fn test_resolve_args_uses_config_defaults() {
+        let args = parse_args(&["carddown", "revise"]);
+        let config: config::Config = toml::from_str(
+            r#"
+            [revise]
+            maximum_cards_per_session = 12
+            maximum_duration_of_session = 9
+            leech_failure_threshold = 6
+            leech_method = "warn"
+            algorithm = "sm2"
+            reverse_probability = 0.5
+        "#,
+        )
+        .unwrap();
+
+        let resolved = resolve_args(args, &config);
+        let ResolvedCommand::Revise {
+            maximum_cards_per_session,
+            maximum_duration_of_session,
+            leech_failure_threshold,
+            leech_method,
+            algorithm,
+            reverse_probability,
+            ..
+        } = resolved.command
+        else {
+            panic!("expected revise command");
+        };
+
+        assert_eq!(maximum_cards_per_session, 12);
+        assert_eq!(maximum_duration_of_session, 9);
+        assert_eq!(leech_failure_threshold, 6);
+        assert_eq!(leech_method, LeechMethod::Warn);
+        assert_eq!(algorithm, Algo::SM2);
+        assert_eq!(reverse_probability, 0.5);
+    }
+
+    #[test]
+    fn test_resolve_args_cli_overrides_config() {
+        let args = parse_args(&[
+            "carddown",
+            "revise",
+            "-n",
+            "8",
+            "-d",
+            "11",
+            "--leech-failure-threshold",
+            "4",
+            "--leech-method",
+            "skip",
+            "--algorithm",
+            "simple8",
+            "--reverse-probability",
+            "0.75",
+        ]);
+        let config: config::Config = toml::from_str(
+            r#"
+            [revise]
+            maximum_cards_per_session = 12
+            maximum_duration_of_session = 9
+            leech_failure_threshold = 6
+            leech_method = "warn"
+            algorithm = "sm2"
+            reverse_probability = 0.5
+        "#,
+        )
+        .unwrap();
+
+        let resolved = resolve_args(args, &config);
+        let ResolvedCommand::Revise {
+            maximum_cards_per_session,
+            maximum_duration_of_session,
+            leech_failure_threshold,
+            leech_method,
+            algorithm,
+            reverse_probability,
+            ..
+        } = resolved.command
+        else {
+            panic!("expected revise command");
+        };
+
+        assert_eq!(maximum_cards_per_session, 8);
+        assert_eq!(maximum_duration_of_session, 11);
+        assert_eq!(leech_failure_threshold, 4);
+        assert_eq!(leech_method, LeechMethod::Skip);
+        assert_eq!(algorithm, Algo::Simple8);
+        assert_eq!(reverse_probability, 0.75);
     }
 
     fn get_card_db() -> CardDb {

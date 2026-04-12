@@ -8,6 +8,12 @@ fn carddown() -> Command {
     cmd
 }
 
+fn carddown_no_tty() -> Command {
+    let mut cmd = carddown();
+    cmd.arg("--no-tty");
+    cmd
+}
+
 fn setup_vault(fixture_dir: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let fixtures = PathBuf::from(fixture_dir);
@@ -22,6 +28,23 @@ fn setup_vault(fixture_dir: &str) -> TempDir {
 
 fn db_path(vault: &TempDir) -> PathBuf {
     vault.path().join(".carddown/carddown.db")
+}
+
+fn write_config(vault: &TempDir, body: &str) {
+    std::fs::create_dir_all(vault.path().join(".carddown")).unwrap();
+    std::fs::write(vault.path().join(".carddown/config.toml"), body).unwrap();
+}
+
+fn assert_failure_contains(output: std::process::Output, expected: &str) {
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(expected), "stderr: {stderr}");
+}
+
+fn assert_success_contains(output: std::process::Output, expected: &str) {
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(expected), "stderr: {stderr}");
 }
 
 #[test]
@@ -65,6 +88,11 @@ fn test_scan_incremental_skips_unchanged() {
         .output()
         .unwrap();
     assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("No modified files detected; skipping scan."),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -103,7 +131,7 @@ fn test_revise_no_cards_due() {
 
     let output = carddown()
         .args(["--vault", &vault_path])
-        .args(["revise", "-n", "0"])
+        .args(["--no-tty", "revise", "-n", "0"])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -127,12 +155,203 @@ fn test_revise_with_tag_filter() {
 
     let output = carddown()
         .args(["--vault", &vault_path])
-        .args(["revise", "-t", "nonexistent"])
+        .args(["--no-tty", "revise", "-t", "nonexistent"])
         .output()
         .unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("No cards due"), "stderr: {stderr}");
+}
+
+#[test]
+fn test_revise_uses_config_defaults() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    write_config(
+        &vault,
+        r#"
+        [revise]
+        maximum_cards_per_session = 0
+    "#,
+    );
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown_no_tty()
+        .args(["--vault", &vault_path])
+        .args(["revise"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("No cards due") || stderr.contains("0 card(s)"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_revise_cli_overrides_config() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    write_config(
+        &vault,
+        r#"
+        [revise]
+        maximum_cards_per_session = 1
+    "#,
+    );
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["--no-tty", "revise", "-n", "0"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("No cards due") || stderr.contains("0 card(s)"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_revise_no_tty_fails_cleanly() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown_no_tty()
+        .args(["--vault", &vault_path])
+        .args(["revise", "-n", "1"])
+        .output()
+        .unwrap();
+
+    assert_failure_contains(output, "revise disabled by --no-tty.");
+}
+
+#[test]
+fn test_revise_auto_detect_no_tty_fails_cleanly() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["revise", "-n", "1"])
+        .output()
+        .unwrap();
+
+    assert_failure_contains(output, "revise requires interactive TTY");
+}
+
+#[test]
+fn test_audit_no_tty_fails_cleanly() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--full", &vault_path])
+        .output()
+        .unwrap();
+    std::fs::remove_file(vault.path().join("single_line.md")).unwrap();
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--full", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown_no_tty()
+        .args(["--vault", &vault_path])
+        .args(["audit"])
+        .output()
+        .unwrap();
+
+    assert_failure_contains(output, "audit disabled by --no-tty.");
+}
+
+#[test]
+fn test_audit_auto_detect_no_tty_fails_cleanly() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--full", &vault_path])
+        .output()
+        .unwrap();
+    std::fs::remove_file(vault.path().join("single_line.md")).unwrap();
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--full", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["audit"])
+        .output()
+        .unwrap();
+
+    assert_failure_contains(output, "audit requires interactive TTY");
+}
+
+#[test]
+fn test_audit_no_tty_no_cards_is_clean_noop() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    let output = carddown_no_tty()
+        .args(["--vault", &vault_path])
+        .args(["audit"])
+        .output()
+        .unwrap();
+
+    assert_success_contains(output, "No orphaned or leech cards to audit.");
+}
+
+#[test]
+fn test_help_shows_revise_defaults() {
+    let output = carddown().args(["revise", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Default: 30"), "stdout: {stdout}");
+    assert!(stdout.contains("Default: 20"), "stdout: {stdout}");
+    assert!(stdout.contains("Default: 15"), "stdout: {stdout}");
+    assert!(stdout.contains("Default: skip"), "stdout: {stdout}");
+    assert!(stdout.contains("Default: sm5"), "stdout: {stdout}");
+    assert!(stdout.contains("Default: 0.0"), "stdout: {stdout}");
 }
 
 #[test]
@@ -252,6 +471,91 @@ fn test_scan_dry_run_does_not_write() {
         !db_path(&vault).exists(),
         "dry-run should not create database"
     );
+}
+
+#[test]
+fn test_scan_uses_configured_state_dir() {
+    let vault = setup_vault("tests/fixtures");
+    let state_dir = TempDir::new().unwrap();
+    let vault_path = vault.path().to_string_lossy().to_string();
+
+    write_config(
+        &vault,
+        &format!(
+            "[storage]\nstate_dir = {:?}\n",
+            state_dir.path().to_string_lossy()
+        ),
+    );
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(state_dir.path().join("carddown.db").exists());
+    assert!(!db_path(&vault).exists());
+}
+
+#[test]
+fn test_scan_file_types_from_config() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+    std::fs::write(
+        vault.path().join("only.txt"),
+        "Only txt card : Answer 🧠 #txt\n",
+    )
+    .unwrap();
+    write_config(
+        &vault,
+        r#"
+        [scan]
+        file_types = ["txt"]
+    "#,
+    );
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", &vault_path])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Found 1 card(s)"), "stderr: {stderr}");
+}
+
+#[test]
+fn test_cli_file_types_override_config() {
+    let vault = setup_vault("tests/fixtures");
+    let vault_path = vault.path().to_string_lossy().to_string();
+    std::fs::write(
+        vault.path().join("only.txt"),
+        "Only txt card : Answer 🧠 #txt\n",
+    )
+    .unwrap();
+    write_config(
+        &vault,
+        r#"
+        [scan]
+        file_types = ["txt"]
+    "#,
+    );
+
+    let output = carddown()
+        .args(["--vault", &vault_path])
+        .args(["scan", "--file-types", "md", &vault_path])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Found 4 card(s)"), "stderr: {stderr}");
 }
 
 #[test]
